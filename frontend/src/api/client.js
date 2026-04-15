@@ -1,22 +1,31 @@
-const BASE = import.meta.env.VITE_API_URL || ''  // empty = use vite proxy
+// RUBRA API Client
+// VITE_API_URL is set in .env.production (your HuggingFace Space URL)
+// In local dev, empty string = vite proxy forwards /api to localhost:8000
+const BASE = import.meta.env.VITE_API_URL || ''
 
-export async function* streamChat({ message, sessionId, taskType, onMeta, onTool }) {
+export async function* streamChat({ message, sessionId, taskType, mode, onMeta, onTool }) {
   const resp = await fetch(`${BASE}/api/chat`, {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, task_type: taskType || null }),
+    body:    JSON.stringify({
+      message,
+      session_id: sessionId,
+      task_type:  taskType || null,
+      mode:       mode || null,
+    }),
   })
-  if (!resp.ok) throw new Error(`API ${resp.status}`)
+  if (!resp.ok) throw new Error(`API error ${resp.status}`)
   yield* parseSSE(resp, onMeta, onTool)
 }
 
-export async function* streamUpload({ file, sessionId, question, onMeta }) {
+export async function* streamUpload({ file, sessionId, question, mode, onMeta }) {
   const form = new FormData()
-  form.append('file', file)
+  form.append('file',       file)
   form.append('session_id', sessionId || '')
-  form.append('question', question || '')
+  form.append('question',   question  || '')
+  form.append('mode',       mode      || '')
   const resp = await fetch(`${BASE}/api/upload`, { method: 'POST', body: form })
-  if (!resp.ok) throw new Error(`Upload ${resp.status}`)
+  if (!resp.ok) throw new Error(`Upload error ${resp.status}`)
   yield* parseSSE(resp, onMeta, null)
 }
 
@@ -37,14 +46,15 @@ async function* parseSSE(resp, onMeta, onTool) {
         if (evt.type === 'tool_result' && onTool) onTool(evt)
         if (evt.type === 'token')       yield evt.content
         if (evt.type === 'error')       throw new Error(evt.message)
-      } catch (e) {
-        if (e.message && e.message !== 'Unexpected') throw e
+      } catch(e) {
+        if (e.message && !e.message.startsWith('Unexpected token')) throw e
       }
     }
   }
 }
 
-export async function getSessions()       { return (await fetch(`${BASE}/api/sessions`)).json() }
-export async function getSession(id)      { return (await fetch(`${BASE}/api/sessions/${id}`)).json() }
-export async function deleteSession(id)   { return fetch(`${BASE}/api/sessions/${id}`, { method: 'DELETE' }) }
-export async function getStatus()         { try { return (await fetch(`${BASE}/api/status`)).json() } catch { return null } }
+export async function getSessions()     { try { return (await fetch(`${BASE}/api/sessions`)).json() } catch { return {sessions:[]} } }
+export async function getSession(id)    { return (await fetch(`${BASE}/api/sessions/${id}`)).json() }
+export async function deleteSession(id) { return fetch(`${BASE}/api/sessions/${id}`, { method: 'DELETE' }) }
+export async function getStatus()       { try { return (await fetch(`${BASE}/api/status`, {signal: AbortSignal.timeout(5000)})).json() } catch { return null } }
+export async function getTrending()     { try { return (await fetch(`${BASE}/api/trending`)).json() } catch { return null } }
