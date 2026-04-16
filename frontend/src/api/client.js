@@ -1,19 +1,38 @@
-// RUBRA API Client
-// VITE_API_URL is set in .env.production (your HuggingFace Space URL)
-// In local dev, empty string = vite proxy forwards /api to localhost:8000
+/**
+ * RUBRA API Client
+ * 
+ * VITE_API_URL must be set in Vercel:
+ * Settings → Environment Variables → VITE_API_URL = your HuggingFace URL
+ * 
+ * Example: https://yourname-rubra-backend.hf.space
+ */
+
 const BASE = import.meta.env.VITE_API_URL || ''
 
+// Warn in console if not configured
+if (!BASE && typeof window !== 'undefined') {
+  console.warn('⚠️ VITE_API_URL not set. Set it in Vercel Environment Variables.')
+}
+
+export const API_BASE = BASE
+
 export async function* streamChat({ message, sessionId, taskType, mode, onMeta, onTool }) {
-  const resp = await fetch(`${BASE}/api/chat`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      message,
-      session_id: sessionId,
-      task_type:  taskType || null,
-      mode:       mode || null,
-    }),
-  })
+  const url = `${BASE}/api/chat`
+  let resp
+  try {
+    resp = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        message,
+        session_id: sessionId,
+        task_type:  taskType || null,
+        mode:       mode     || null,
+      }),
+    })
+  } catch (e) {
+    throw new Error(`Cannot reach backend. Check VITE_API_URL in Vercel settings.`)
+  }
   if (!resp.ok) throw new Error(`API error ${resp.status}`)
   yield* parseSSE(resp, onMeta, onTool)
 }
@@ -24,7 +43,12 @@ export async function* streamUpload({ file, sessionId, question, mode, onMeta })
   form.append('session_id', sessionId || '')
   form.append('question',   question  || '')
   form.append('mode',       mode      || '')
-  const resp = await fetch(`${BASE}/api/upload`, { method: 'POST', body: form })
+  let resp
+  try {
+    resp = await fetch(`${BASE}/api/upload`, { method: 'POST', body: form })
+  } catch (e) {
+    throw new Error('Cannot reach backend for file upload.')
+  }
   if (!resp.ok) throw new Error(`Upload error ${resp.status}`)
   yield* parseSSE(resp, onMeta, null)
 }
@@ -47,14 +71,26 @@ async function* parseSSE(resp, onMeta, onTool) {
         if (evt.type === 'token')       yield evt.content
         if (evt.type === 'error')       throw new Error(evt.message)
       } catch(e) {
-        if (e.message && !e.message.startsWith('Unexpected token')) throw e
+        if (e.message && !e.message.startsWith('Unexpected')) throw e
       }
     }
   }
 }
 
-export async function getSessions()     { try { return (await fetch(`${BASE}/api/sessions`)).json() } catch { return {sessions:[]} } }
+export async function getSessions()     {
+  try { return (await fetch(`${BASE}/api/sessions`, {signal: AbortSignal.timeout(5000)})).json() }
+  catch { return { sessions: [] } }
+}
 export async function getSession(id)    { return (await fetch(`${BASE}/api/sessions/${id}`)).json() }
 export async function deleteSession(id) { return fetch(`${BASE}/api/sessions/${id}`, { method: 'DELETE' }) }
-export async function getStatus()       { try { return (await fetch(`${BASE}/api/status`, {signal: AbortSignal.timeout(5000)})).json() } catch { return null } }
-export async function getTrending()     { try { return (await fetch(`${BASE}/api/trending`)).json() } catch { return null } }
+export async function getStatus()       {
+  if (!BASE) return null   // No URL = offline immediately
+  try {
+    const r = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(5000) })
+    return r.ok ? await r.json() : null
+  } catch { return null }
+}
+export async function getTrending()     {
+  try { return (await fetch(`${BASE}/api/trending`, {signal: AbortSignal.timeout(8000)})).json() }
+  catch { return null }
+}
