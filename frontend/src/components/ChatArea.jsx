@@ -73,12 +73,34 @@ export function ToolBadge({ tool }) {
   )
 }
 
-export default function ChatArea({ messages, streaming, toolResult, onEdit, onSuggest }) {
+function OfflineBanner() {
+  return (
+    <div className="mx-4 mt-4 p-4 rounded-xl bg-rose-500/08 border border-rose-500/20 text-sm fade-in">
+      <p className="font-semibold text-rose-400 mb-2">⚠️ Backend offline — 2 steps to fix:</p>
+      <ol className="list-decimal list-inside space-y-1.5 text-white/60 text-[13px]">
+        <li>
+          Go to your <strong className="text-white/80">HuggingFace Space</strong> →
+          make sure it shows <span className="text-emerald-400">Running</span>
+        </li>
+        <li>
+          In <strong className="text-white/80">Vercel</strong> → Settings → Environment Variables → add:
+          <div className="mt-1.5 bg-black/40 rounded-lg px-3 py-2 font-mono text-[12px] text-amber-300">
+            VITE_API_URL = https://YOUR-HF-USERNAME-rubra-backend.hf.space
+          </div>
+          Then click <strong>Redeploy</strong>
+        </li>
+      </ol>
+    </div>
+  )
+}
+
+export default function ChatArea({ messages, streaming, toolResult, onEdit, onSuggest, online }) {
   const bottomRef = useRef()
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages])
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {online === false && <OfflineBanner />}
       {messages.length === 0 ? (
         <div className="flex flex-col h-full"><Welcome onSuggest={onSuggest}/></div>
       ) : (
