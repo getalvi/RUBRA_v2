@@ -418,13 +418,73 @@ def tool_books(query,n=5):
     except: return []
 
 def tool_books_2026(query=""):
-    """Books with 2024-2026 publication filter."""
-    r=_tool_get("https://openlibrary.org/search.json",{"q":query or "popular 2025 2026","sort":"new","limit":8,"fields":"title,author_name,first_publish_year,subject"})
+    """Books published 2024-2026 using multiple strategies."""
+    results = []
+    # Strategy 1: Open Library sort by new
+    for search_q in [query or "fiction 2025", query or "nonfiction 2025", "bestseller 2026"]:
+        r = _tool_get("https://openlibrary.org/search.json",
+                      {"q": search_q, "sort": "new", "limit": 10,
+                       "fields": "title,author_name,first_publish_year,subject"})
+        if r:
+            try:
+                books = r.json().get("docs", [])
+                recent = [b for b in books if b.get("first_publish_year", 0) >= 2023]
+                results.extend(recent)
+            except: pass
+        if results: break
+
+    # Strategy 2: Google Books free API (no key needed)
+    if not results:
+        r = _tool_get("https://www.googleapis.com/books/v1/volumes",
+                      {"q": f"{query or 'bestseller'} 2025", "orderBy": "newest",
+                       "maxResults": 8, "langRestrict": "en"})
+        if r:
+            try:
+                items = r.json().get("items", [])
+                for item in items:
+                    info = item.get("volumeInfo", {})
+                    pub_date = info.get("publishedDate", "")
+                    year = int(pub_date[:4]) if pub_date and len(pub_date) >= 4 and pub_date[:4].isdigit() else 0
+                    if year >= 2023:
+                        results.append({
+                            "title":   info.get("title", ""),
+                            "authors": info.get("authors", [])[:2],
+                            "year":    year,
+                            "subjects": info.get("categories", [])[:2],
+                            "source": "google_books"
+                        })
+            except: pass
+
+    # Deduplicate by title
+    seen = set()
+    unique = []
+    for b in results:
+        t = b.get("title", "").lower()[:40]
+        if t and t not in seen:
+            seen.add(t); unique.append(b)
+
+    return unique[:6] if unique else []
+
+def tool_google_books(query, year_from=2020, n=6):
+    """Search Google Books API (free, no key needed)."""
+    r = _tool_get("https://www.googleapis.com/books/v1/volumes",
+                  {"q": query, "orderBy": "newest", "maxResults": n, "langRestrict": "en"})
     if not r: return []
     try:
-        all_books=r.json().get("docs",[])
-        recent=[b for b in all_books if b.get("first_publish_year",0) and b.get("first_publish_year",0)>=2024]
-        return recent[:6] or all_books[:4]
+        out = []
+        for item in r.json().get("items", []):
+            info = item.get("volumeInfo", {})
+            pub  = info.get("publishedDate", "")
+            year = int(pub[:4]) if pub and len(pub) >= 4 and pub[:4].isdigit() else 0
+            if year >= year_from:
+                out.append({
+                    "title":   info.get("title", ""),
+                    "authors": info.get("authors", [])[:2],
+                    "year":    year,
+                    "desc":    info.get("description", "")[:200],
+                    "subjects": info.get("categories", [])[:2],
+                })
+        return out[:n]
     except: return []
 
 def tool_calc(expr):
