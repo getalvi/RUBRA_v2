@@ -1,64 +1,87 @@
+// ═══════════════════════════════════════════════════════
+// PATCH 5 — frontend/src/components/Message.jsx
+// ACTION: Replace ENTIRE file with this
+// ═══════════════════════════════════════════════════════
+
 import { useState, useRef, useEffect } from 'react'
-import { Pencil, Check, X, Copy, CheckCheck, Hexagon } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Pencil, Check, X, Copy, CheckCheck, Hexagon, Cpu, Brain, Search, FileText, GraduationCap, MessageCircle } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-// Code block with copy button
+// ── Code block with copy ─────────────────────────────────
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false)
   const lang = (className || '').replace('language-', '') || 'code'
   const code = String(children).replace(/\n$/, '')
   const copy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+
   return (
-    <div className="code-block">
-      <div className="code-header">
-        <span className="code-lang">{lang}</span>
-        <button onClick={copy} className="copy-btn">
-          {copied ? <><CheckCheck size={11} style={{display:'inline',color:'#4ade80'}}/> Copied</> : <><Copy size={11} style={{display:'inline'}}/> Copy</>}
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="my-3 rounded-xl overflow-hidden"
+      style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      <div className="flex items-center justify-between px-4 py-2"
+        style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <span className="font-mono text-[11px] tracking-widest uppercase"
+          style={{ color: 'rgba(255,255,255,0.3)' }}>{lang}</span>
+        <button onClick={copy}
+          className="flex items-center gap-1.5 text-[11px] transition-all hover:opacity-100"
+          style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {copied
+            ? <><CheckCheck size={11} style={{ color: '#4ade80' }} /> Copied</>
+            : <><Copy size={11} /> Copy</>}
         </button>
       </div>
-      <pre><code>{code}</code></pre>
-    </div>
+      <pre className="px-4 py-3.5 overflow-x-auto text-[13px] leading-relaxed font-mono m-0 border-0"
+        style={{ color: '#e2e8f0', background: 'transparent' }}>
+        <code>{code}</code>
+      </pre>
+    </motion.div>
   )
 }
 
-// Markdown renderer
+// ── Markdown ─────────────────────────────────────────────
 function Markdown({ text }) {
-  // Remove DeepSeek think tags
-  const clean = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  const clean = text.replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<action>[\s\S]*?<\/action>/gi, '')
+    .replace(/<observation>[\s\S]*?<\/observation>/gi, '')
+    .trim()
+
   return (
     <div className="md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+      <ReactMarkdown remarkPlugins={[remarkGfm]}
         components={{
-          code({ node, inline, className, children, ...props }) {
-            if (inline) return <code {...props}>{children}</code>
+          code({ inline, className, children }) {
+            if (inline) return <code style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 5, padding: '2px 6px', fontFamily: 'JetBrains Mono,monospace', fontSize: '.86em', color: '#fb7185' }}>{children}</code>
             return <CodeBlock className={className}>{children}</CodeBlock>
           },
-          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener">{children}</a>,
+          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener" style={{ color: '#fb7185', textDecoration: 'underline', textUnderlineOffset: 2 }}>{children}</a>,
         }}
-      >
-        {clean}
-      </ReactMarkdown>
+      >{clean}</ReactMarkdown>
     </div>
   )
 }
 
-// Agent badge
+// ── Agent badges ─────────────────────────────────────────
 const BADGE = {
-  GeneralAgent:     { label:'🧠 Think',  cls:'text-rose-400 border-rose-500/20 bg-rose-500/08' },
-  CodingAgent:      { label:'⚙ Code',   cls:'text-sky-400 border-sky-500/20 bg-sky-500/08' },
-  SearchAgent:      { label:'🔍 Search', cls:'text-amber-400 border-amber-500/20 bg-amber-500/08' },
-  FileAgent:        { label:'📄 File',   cls:'text-violet-400 border-violet-500/20 bg-violet-500/08' },
-  SmartTutorAgent:  { label:'🎓 Tutor',  cls:'text-violet-400 border-violet-500/20 bg-violet-500/08' },
-  FastChatAgent:    { label:'💬 Chat',   cls:'text-emerald-400 border-emerald-500/20 bg-emerald-500/08' },
+  GeneralAgent:    { label: 'Think',   icon: Brain,         color: '#e11d48', bg: 'rgba(225,29,72,0.1)',   border: 'rgba(225,29,72,0.25)' },
+  CodingAgent:     { label: 'Code',    icon: Cpu,           color: '#38bdf8', bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.25)' },
+  SearchAgent:     { label: 'Search',  icon: Search,        color: '#fbbf24', bg: 'rgba(251,191,36,0.1)',  border: 'rgba(251,191,36,0.25)' },
+  FileAgent:       { label: 'File',    icon: FileText,      color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)' },
+  SmartTutorAgent: { label: 'Tutor',   icon: GraduationCap, color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)' },
+  VisionAgent:     { label: 'Vision',  icon: Hexagon,       color: '#34d399', bg: 'rgba(52,211,153,0.1)',  border: 'rgba(52,211,153,0.25)' },
+  FastChatAgent:   { label: 'Chat',    icon: MessageCircle, color: '#4ade80', bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.25)' },
 }
 
-// User message with inline edit
+// ── User message with inline edit ───────────────────────
 function UserMsg({ msg, onEdit }) {
-  const [editing, setEditing] = useState(false)
-  const [draft,   setDraft]   = useState(msg.content)
-  const [show,    setShow]    = useState(false)
+  const [editing, setEditing]  = useState(false)
+  const [draft,   setDraft]    = useState(msg.content)
+  const [hovered, setHovered]  = useState(false)
   const ta = useRef()
 
   useEffect(() => {
@@ -78,101 +101,179 @@ function UserMsg({ msg, onEdit }) {
   const cancel = () => { setDraft(msg.content); setEditing(false) }
 
   return (
-    <div className="flex justify-end px-4 sm:px-6 py-2 slide-up"
-      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <div className="max-w-[82%] sm:max-w-[72%] flex flex-col items-end gap-1.5">
-        {/* Edit button */}
-        {show && !editing && onEdit && (
-          <button onClick={() => setEditing(true)}
-            className="flex items-center gap-1 text-[11px] text-white/30 hover:text-white/60
-              px-2 py-0.5 rounded hover:bg-white/[.06] transition-all fade-in">
-            <Pencil size={10}/> Edit
-          </button>
-        )}
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+      className="flex justify-end px-4 sm:px-6 py-2"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="max-w-[82%] sm:max-w-[70%] flex flex-col items-end gap-1.5">
+        <AnimatePresence>
+          {hovered && !editing && onEdit && (
+            <motion.button
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-all"
+              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}
+            >
+              <Pencil size={10} /> Edit
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         {editing ? (
-          <div className="w-full flex flex-col gap-2">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full flex flex-col gap-2">
             <textarea ref={ta} value={draft}
-              onChange={e => { setDraft(e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-              onKeyDown={e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();save()} if(e.key==='Escape')cancel() }}
-              className="w-full bg-white/[.07] border border-rose-500/35 rounded-xl px-4 py-2.5
-                text-[14px] text-white leading-relaxed min-h-[52px]" rows={1}/>
+              onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() } if (e.key === 'Escape') cancel() }}
+              className="w-full px-4 py-2.5 rounded-xl text-[14px] leading-relaxed min-h-[52px] outline-none"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(225,29,72,0.4)', color: 'rgba(255,255,255,0.9)', fontFamily: 'inherit', resize: 'none' }}
+              rows={1}
+            />
             <div className="flex gap-2 justify-end">
-              <button onClick={cancel} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs
-                text-white/50 hover:text-white bg-white/[.05] hover:bg-white/[.10] transition-all">
-                <X size={11}/> Cancel
+              <button onClick={cancel}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-all"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <X size={11} /> Cancel
               </button>
-              <button onClick={save} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs
-                font-medium text-white bg-rose-500 hover:bg-rose-600 transition-all">
-                <Check size={11}/> Resend
+              <button onClick={save}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{ background: '#e11d48', color: 'white', border: 'none' }}>
+                <Check size={11} /> Resend
               </button>
             </div>
-          </div>
+          </motion.div>
         ) : (
-          <div className="bg-white/[.07] hover:bg-white/[.09] border border-white/[.08]
-            rounded-2xl rounded-br-md px-4 py-2.5 text-[14.5px] leading-[1.68]
-            text-white/90 whitespace-pre-wrap transition-colors">
+          <motion.div
+            whileHover={{ scale: 1.005 }}
+            className="px-4 py-2.5 rounded-2xl rounded-br-md text-[14.5px] leading-[1.68] whitespace-pre-wrap"
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              color: 'rgba(255,255,255,0.9)',
+            }}
+          >
             {msg.content}
-          </div>
+          </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
-// Assistant message
+// ── Assistant message ─────────────────────────────────────
 function AssistantMsg({ msg, isStreaming }) {
   const [copied, setCopied] = useState(false)
   const badge = BADGE[msg.agent]
+  const Icon  = badge?.icon || Hexagon
 
   const copyAll = () => {
-    navigator.clipboard.writeText(msg.content.replace(/<think>[\s\S]*?<\/think>/g,'').trim())
+    const text = msg.content.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/gi, '').trim()
+    navigator.clipboard.writeText(text)
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <div className="px-4 sm:px-6 py-2 slide-up group">
-      <div className="max-w-[88%] sm:max-w-[82%] lg:max-w-[75%]">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      className="px-4 sm:px-6 py-2 group"
+    >
+      <div className="max-w-[90%] sm:max-w-[84%] lg:max-w-[76%]">
+
         {/* Avatar + badge row */}
-        <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-6 h-6 rounded-md bg-rose-500/12 border border-rose-500/22 flex items-center justify-center flex-shrink-0">
-            <Hexagon size={12} className="text-rose-400"/>
-          </div>
-          <span className="text-[12px] font-medium text-white/55">RUBRA</span>
+        <div className="flex items-center gap-2.5 mb-2.5">
+          <motion.div
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            transition={{ type: 'spring', stiffness: 400 }}
+            className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{
+              background: badge ? badge.bg : 'rgba(225,29,72,0.12)',
+              border: `1px solid ${badge ? badge.border : 'rgba(225,29,72,0.22)'}`,
+            }}
+          >
+            <Icon size={12} style={{ color: badge?.color || '#fb7185' }} />
+          </motion.div>
+          <span className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>RUBRA</span>
           {badge && (
-            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-[10px] px-2 py-0.5 rounded-full border font-medium"
+              style={{ color: badge.color, background: badge.bg, borderColor: badge.border }}
+            >
+              {badge.label}
+            </motion.span>
+          )}
+          {isStreaming && (
+            <motion.div
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="flex gap-1"
+            >
+              {[0, 1, 2].map(i => (
+                <motion.div key={i} className="w-1 h-1 rounded-full"
+                  style={{ background: badge?.color || '#e11d48' }}
+                  animate={{ scale: [1, 1.4, 1] }}
+                  transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
+                />
+              ))}
+            </motion.div>
           )}
         </div>
 
         {/* Content */}
         <div className="pl-[34px]">
           {msg.isError ? (
-            <div className="text-rose-400 text-sm bg-rose-500/08 border border-rose-500/18 rounded-xl px-4 py-3">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="text-sm px-4 py-3 rounded-xl"
+              style={{ color: '#fb7185', background: 'rgba(248,113,133,0.08)', border: '1px solid rgba(248,113,133,0.2)' }}>
               {msg.content}
-            </div>
+            </motion.div>
           ) : (
             <>
-              <Markdown text={msg.content}/>
-              {isStreaming && <span className="cursor"/>}
+              <Markdown text={msg.content} />
+              {isStreaming && (
+                <motion.span
+                  animate={{ opacity: [1, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.9, ease: 'steps(2)' }}
+                  className="inline-block w-0.5 h-[15px] ml-0.5 rounded-sm align-middle"
+                  style={{ background: '#e11d48' }}
+                />
+              )}
             </>
           )}
 
           {/* Copy */}
           {!isStreaming && msg.content && !msg.isError && (
-            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 0 }}
+              whileHover={{ opacity: 1 }}
+              className="mt-2 group-hover:opacity-100 transition-opacity"
+              style={{ opacity: 0 }}
+            >
               <button onClick={copyAll}
-                className="flex items-center gap-1.5 text-[11px] text-white/25 hover:text-white/55 transition-colors">
-                {copied ? <><CheckCheck size={11} className="text-emerald-400"/> Copied</> : <><Copy size={11}/> Copy</>}
+                className="flex items-center gap-1.5 text-[11px] transition-colors"
+                style={{ color: 'rgba(255,255,255,0.25)' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}
+              >
+                {copied ? <><CheckCheck size={11} style={{ color: '#4ade80' }} /> Copied</> : <><Copy size={11} /> Copy</>}
               </button>
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
 export default function Message({ msg, isStreaming, onEdit }) {
-  if (msg.role === 'user') return <UserMsg msg={msg} onEdit={onEdit}/>
-  return <AssistantMsg msg={msg} isStreaming={isStreaming}/>
+  if (msg.role === 'user') return <UserMsg msg={msg} onEdit={onEdit} />
+  return <AssistantMsg msg={msg} isStreaming={isStreaming} />
 }
