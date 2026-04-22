@@ -1,24 +1,19 @@
+// frontend/src/components/ChatArea.jsx — REPLACE ENTIRE FILE
+
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Message from './Message'
 import { Hexagon } from 'lucide-react'
 
-// ═══════════════════════════════════════════════════════
-// PATCH 6 — frontend/src/components/ChatArea.jsx
-// ACTION: Replace the Welcome function only (lines 16-75)
-// Find: "function Welcome({ onSuggest }) {"
-// Replace with this entire Welcome function
-// ═══════════════════════════════════════════════════════
-
 const STARTERS = [
-  { icon: '🌤', title: 'Live weather',       desc: 'Real-time any city',        q: "What's the weather in Dhaka right now?" },
-  { icon: '⚙',  title: 'Write code',         desc: 'Hermes Ultra Engine',        q: 'Build a glassmorphic React dashboard with live charts and dark mode' },
-  { icon: '🎓', title: 'Smart Tutor',        desc: 'SSC/HSC/JSC help',           q: 'SSC Physics er first chapter ta explain koro step by step' },
-  { icon: '🧮', title: 'Math solve',         desc: 'Step by step working',       q: 'Solve: x² + 5x + 6 = 0 and explain the quadratic formula' },
-  { icon: '₿',  title: 'Crypto prices',     desc: 'Live BTC, ETH & more',       q: 'Current Bitcoin, Ethereum, Solana prices with 24h change?' },
-  { icon: '🖼',  title: 'Vision / PDF',      desc: 'Upload question paper',      q: null, isUpload: true },
-  { icon: '📝', title: 'Exam paper',        desc: 'SSC/HSC generate',           q: 'HSC Physics chapter 1 theke 15ta MCQ question paper banao' },
-  { icon: '🌐', title: 'Latest news',       desc: 'Live internet knowledge',    q: 'What are the biggest tech news stories happening right now?' },
+  { icon: '🌤', title: 'Live weather',   desc: 'Real-time any city',          q: "What's the weather in Dhaka right now?" },
+  { icon: '⚙',  title: 'Write code',     desc: 'Hermes Ultra Engine',          q: 'Build a glassmorphic React dashboard with live charts and dark mode' },
+  { icon: '🎓', title: 'Smart Tutor',    desc: 'SSC/HSC/JSC help',             q: 'SSC Physics er first chapter ta explain koro step by step' },
+  { icon: '🧮', title: 'Math solve',     desc: 'Step by step working',         q: 'Solve: x² + 5x + 6 = 0 and explain the quadratic formula' },
+  { icon: '₿',  title: 'Crypto prices', desc: 'Live BTC, ETH & more',         q: 'Current Bitcoin, Ethereum, Solana prices with 24h change?' },
+  { icon: '🖼',  title: 'Vision / PDF',  desc: 'Upload question paper',        q: null, isUpload: true },
+  { icon: '📝', title: 'Exam paper',    desc: 'SSC/HSC generate',             q: 'HSC Physics chapter 1 theke 15ta MCQ question paper banao' },
+  { icon: '🌐', title: 'Latest news',   desc: 'Live internet knowledge',      q: 'What are the biggest tech news stories happening right now?' },
 ]
 
 function Welcome({ onSuggest }) {
@@ -35,28 +30,24 @@ function Welcome({ onSuggest }) {
         animate={{ y: [0, -8, 0] }}
         transition={{ repeat: Infinity, duration: 5, ease: 'easeInOut' }}
       >
-        {/* Outer glow ring */}
         <motion.div
           className="absolute inset-0 rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(225,29,72,0.15) 0%, transparent 70%)' }}
           animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
         />
-        {/* Rotating ring 1 */}
         <motion.div
           className="absolute inset-0 rounded-full"
           style={{ border: '1px solid rgba(225,29,72,0.2)' }}
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 12, ease: 'linear' }}
         />
-        {/* Rotating ring 2 */}
         <motion.div
           className="absolute inset-3 rounded-full"
           style={{ border: '1px solid rgba(225,29,72,0.3)' }}
           animate={{ rotate: -360 }}
           transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
         />
-        {/* Center hexagon */}
         <div
           className="absolute inset-6 rounded-full flex items-center justify-center"
           style={{
@@ -69,7 +60,6 @@ function Welcome({ onSuggest }) {
         </div>
       </motion.div>
 
-      {/* Title */}
       <motion.h1
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -99,7 +89,6 @@ function Welcome({ onSuggest }) {
         Vision · Smart Tutor · Hermes Coding · Live Data · Exam Generator
       </motion.p>
 
-      {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full max-w-[700px]">
         {STARTERS.map((s, i) => (
           <motion.button
@@ -120,8 +109,16 @@ function Welcome({ onSuggest }) {
               cursor: s.isUpload ? 'default' : 'pointer',
               opacity: s.isUpload ? 0.45 : 1,
             }}
-            onMouseEnter={e => { if (!s.isUpload) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)' } }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+            onMouseEnter={e => {
+              if (!s.isUpload) {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+            }}
           >
             <span className="text-xl leading-none">{s.icon}</span>
             <div>
@@ -153,17 +150,18 @@ function Welcome({ onSuggest }) {
   )
 }
 
-
-
 export function ToolBadge({ tool }) {
   if (!tool) return null
-  const icons = { weather:'🌤', crypto:'₿', currency:'💱', wikipedia:'📖', arxiv:'🔬', books:'📚', file:'📄', image:'🖼' }
+  const icons = {
+    weather: '🌤', crypto: '₿', currency: '💱',
+    wikipedia: '📖', arxiv: '🔬', books: '📚', file: '📄', image: '🖼',
+  }
   return (
     <div className="mx-4 sm:mx-6 my-1 inline-flex items-center gap-2 px-3 py-1.5
       rounded-lg bg-amber-500/06 border border-amber-500/12 text-xs text-amber-400/70 fade-in">
       <span>{icons[tool.tool] || '🔧'}</span>
       <span>Retrieved {tool.tool} data</span>
-      {tool.title && <span className="text-white/20">— {tool.title.slice(0,30)}</span>}
+      {tool.title && <span className="text-white/20">— {tool.title.slice(0, 30)}</span>}
     </div>
   )
 }
@@ -189,27 +187,43 @@ function OfflineBanner() {
   )
 }
 
-export default function ChatArea({ messages, streaming, toolResult, onEdit, onSuggest, online }) {
+// ── Main export ───────────────────────────────────────────
+export default function ChatArea({
+  messages, streaming, toolResult,
+  onEdit, onSuggest, online,
+  artifacts, activeArtifactId, onOpenArtifact,
+}) {
   const bottomRef = useRef()
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   return (
     <div className="flex-1 overflow-y-auto">
       {online === false && <OfflineBanner />}
       {messages.length === 0 ? (
-        <div className="flex flex-col h-full"><Welcome onSuggest={onSuggest}/></div>
+        <div className="flex flex-col h-full">
+          <Welcome onSuggest={onSuggest} />
+        </div>
       ) : (
         <div className="py-4 max-w-4xl mx-auto w-full">
           {messages.map((msg, i) => {
-            const isLast = i === messages.length-1 && msg.role==='assistant'
+            const isLast = i === messages.length - 1 && msg.role === 'assistant'
             return (
               <div key={msg.id}>
-                {isLast && toolResult && <ToolBadge tool={toolResult}/>}
-                <Message msg={msg} isStreaming={isLast && streaming} onEdit={msg.role==='user' ? onEdit : null}/>
+                {isLast && toolResult && <ToolBadge tool={toolResult} />}
+                <Message
+                  msg={msg}
+                  isStreaming={isLast && streaming}
+                  onEdit={msg.role === 'user' ? onEdit : null}
+                  artifacts={artifacts}
+                  onOpenPanel={onOpenArtifact}
+                />
               </div>
             )
           })}
-          <div ref={bottomRef} className="h-4"/>
+          <div ref={bottomRef} className="h-4" />
         </div>
       )}
     </div>
