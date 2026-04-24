@@ -37,6 +37,22 @@ function isCodeIncomplete(code) {
   ]
   return incompletePatterns.some(p => p.test(trimmed))
 }
+// Auto-continue if RUBRA_CONTINUE marker detected
+useEffect(() => {
+  if (!streaming && artifact?.code && onContinue) {
+    const trimmed = artifact.code.trimEnd()
+    if (trimmed.endsWith('<!-- RUBRA_CONTINUE -->')) {
+      // Small delay then auto-continue
+      const timer = setTimeout(() => {
+        const lastChunk = artifact.code
+          .replace('<!-- RUBRA_CONTINUE -->', '')
+          .slice(-200)
+        onContinue(lastChunk)
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }
+}, [streaming, artifact?.code])
 
 // ── Wrap JSX/JS into runnable HTML for iframe ────────────
 function wrapForPreview(lang, code) {
