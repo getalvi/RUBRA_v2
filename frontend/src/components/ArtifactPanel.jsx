@@ -20,6 +20,23 @@ function isRenderable(lang, code) {
   if (lang === 'javascript' && code.includes('document.')) return true
   return false
 }
+// Detect if code looks incomplete
+function isCodeIncomplete(code) {
+  if (!code || code.length < 100) return false
+  const trimmed = code.trimEnd()
+  // Check for RUBRA_CONTINUE marker
+  if (trimmed.endsWith('<!-- RUBRA_CONTINUE -->')) return true
+  // Check for obviously incomplete patterns
+  const incompletePatterns = [
+    /\/\/ \.{3}$/m,           // // ...
+    /# \.{3}$/m,              // # ...
+    /\/\* continues/im,        // /* continues
+    /\[rest/im,               // [rest
+    /TODO:/im,                // TODO:
+    /\.{3}\s*$/,              // ends with ...
+  ]
+  return incompletePatterns.some(p => p.test(trimmed))
+}
 
 // ── Wrap JSX/JS into runnable HTML for iframe ────────────
 function wrapForPreview(lang, code) {
@@ -126,6 +143,7 @@ export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectAr
         borderColor: 'rgba(255,255,255,0.07)',
         width: fullscreen ? '100vw' : undefined,
       }}
+      
     >
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b flex-shrink-0"
@@ -358,3 +376,4 @@ export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectAr
     </motion.div>
   )
 }
+
