@@ -101,8 +101,14 @@ export default function App() {
   }, [])
 
   const handleSend = (message, taskType = null, mode = null) => {
-    chat.send(message, taskType, mode || appMode)
-  }
+  chat.send(message, taskType, mode || appMode)
+}
+
+// Add this new function
+const handleArtifactContinue = useCallback((lastChunk) => {
+  const continueMsg = `[RUBRA_CONTINUE]${lastChunk}`
+  chat.send(continueMsg, 'code', null)
+}, [chat])
 
   // Called from Message.jsx "Open in Panel" button
   const handleOpenArtifact = useCallback((artifactId) => {
@@ -186,6 +192,8 @@ export default function App() {
                   activeId={activeArtifactId}
                   onClose={() => setPanelOpen(false)}
                   onSelectArtifact={setActiveArtifactId}
+                  onContinue={handleArtifactContinue}   {/* এটা add করো */}
+                  streaming={chat.streaming}             {/* এটা add করো */}
                 />
               </div>
             )}
