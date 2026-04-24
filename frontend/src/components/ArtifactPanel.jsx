@@ -64,7 +64,7 @@ function wrapForPreview(lang, code) {
 // An artifact = { id, lang, code, title, timestamp }
 
 // ── Main Panel ───────────────────────────────────────────
-export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectArtifact }) {
+export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectArtifact, onContinue, streaming }) {
   const [tab, setTab]           = useState('code')   // 'code' | 'preview'
   const [copied, setCopied]     = useState(false)
   const [viewport, setViewport] = useState('desktop') // 'desktop' | 'mobile'
