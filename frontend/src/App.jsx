@@ -192,8 +192,8 @@ const handleArtifactContinue = useCallback((lastChunk) => {
                   activeId={activeArtifactId}
                   onClose={() => setPanelOpen(false)}
                   onSelectArtifact={setActiveArtifactId}
-                  onContinue={handleArtifactContinue}   {/* এটা add করো */}
-                  streaming={chat.streaming}             {/* এটা add করো */}
+                  onContinue={handleArtifactContinue}
+                  streaming={chat.streaming}
                 />
               </div>
             )}
