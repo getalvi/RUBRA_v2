@@ -1,23 +1,37 @@
 import { useState, useRef, useCallback } from 'react'
-import { Send, Square, Paperclip, Code2, Search, FileText, Zap, GraduationCap, X, Image } from 'lucide-react'
+import {
+  Send, Square, Paperclip, Code2, Search, FileText, Zap,
+  GraduationCap, X, Image, Mic, MicOff
+} from 'lucide-react'
+import { createSpeechRecognizer } from '../api/client'
 
 const TASK_BTNS = [
-  { id: null,     icon: Zap,            label: 'Auto',   desc: 'RUBRA picks best agent',        cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' },
-  { id: 'code',   icon: Code2,          label: 'Code',   desc: 'Hermes Coding Engine',           cls: 'text-sky-400 bg-sky-500/10 border-sky-500/25' },
-  { id: 'search', icon: Search,         label: 'Search', desc: 'Live data: weather, crypto, ...',cls: 'text-amber-400 bg-amber-500/10 border-amber-500/25' },
-  { id: 'tutor',  icon: GraduationCap,  label: 'Tutor',  desc: 'Smart Tutor — Bangladesh curriculum', cls: 'text-violet-400 bg-violet-500/10 border-violet-500/25' },
-  { id: 'file',   icon: FileText,       label: 'File',   desc: 'PDF, Excel, CSV, DOCX, Image',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/25' },
+  { id: null, icon: Zap, label: 'Auto', desc: 'RUBRA picks best agent', cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' },
+  { id: 'code', icon: Code2, label: 'Code', desc: 'Hermes Coding Engine', cls: 'text-sky-400 bg-sky-500/10 border-sky-500/25' },
+  { id: 'search', icon: Search, label: 'Search', desc: 'Live data: weather, crypto, ...', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/25' },
+  { id: 'tutor', icon: GraduationCap, label: 'Tutor', desc: 'Smart Tutor — Bangladesh curriculum', cls: 'text-violet-400 bg-violet-500/10 border-violet-500/25' },
+  { id: 'file', icon: FileText, label: 'File', desc: 'PDF, Excel, CSV, DOCX, Image', cls: 'text-rose-400 bg-rose-500/10 border-rose-500/25' },
 ]
 
 const ACCEPT_ALL = ".pdf,.xlsx,.xls,.csv,.docx,.doc,.txt,.md,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.json,.yaml,.sh,.cpp,.c,.html,.css,.jpg,.jpeg,.png,.gif,.webp,.bmp"
 
-export default function InputBar({ onSend, onFile, onStop, streaming, disabled }) {
-  const [text, setText]   = useState('')
-  const [task, setTask]   = useState(null)
-  const [file, setFile]   = useState(null)
+export default function InputBar({
+  onSend, onFile, onStop, streaming, disabled,
+  appMode, onModeChange,
+  onVoiceResult,  // NEW: callback for voice transcription
+}) {
+  const [text, setText] = useState('')
+  const [task, setTask] = useState(null)
+  const [file, setFile] = useState(null)
   const [fileQ, setFileQ] = useState('')
-  const [drag, setDrag]   = useState(false)
-  const taRef   = useRef()
+  const [drag, setDrag] = useState(false)
+  
+  // Voice states
+  const [isRecording, setIsRecording] = useState(false)
+  const [recorder, setRecorder] = useState(null)
+  const [interimText, setInterimText] = useState('')
+  
+  const taRef = useRef()
   const fileRef = useRef()
 
   const grow = () => {
@@ -47,6 +61,61 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
     if (f.size > 25 * 1024 * 1024) { alert('Max 25MB'); return }
     setFile(f); setDrag(false)
   }
+
+  // ── Voice Recording ──────────────────────────────────
+  const startRecording = useCallback(() => {
+    // Detect language for STT
+    const isBangla = /[\u0980-\u09FF]/.test(text) || appMode === 'tutor'
+    const lang = isBangla ? 'bn-BD' : 'en-US'
+    
+    const rec = createSpeechRecognizer({
+      lang,
+      onResult: (final, interim) => {
+        if (final) {
+          setText(prev => {
+            const newText = prev + (prev ? ' ' : '') + final
+            // Auto-submit on final result if user pauses
+            return newText
+          })
+          setInterimText('')
+        }
+        if (interim) setInterimText(interim)
+      },
+      onError: (err) => {
+        alert(err)
+        setIsRecording(false)
+        setRecorder(null)
+      },
+      onEnd: () => {
+        setIsRecording(false)
+        setRecorder(null)
+        setInterimText('')
+        // Auto-submit if we have text
+        setText(prev => {
+          if (prev.trim()) {
+            setTimeout(() => submit(), 100)
+          }
+          return prev
+        })
+      },
+    })
+    
+    if (!rec) {
+      alert('Voice input not supported. Use Chrome/Edge.')
+      return
+    }
+    
+    rec.start()
+    setRecorder(rec)
+    setIsRecording(true)
+  }, [text, appMode, submit])
+
+  const stopRecording = useCallback(() => {
+    recorder?.stop()
+    setIsRecording(false)
+    setRecorder(null)
+    setInterimText('')
+  }, [recorder])
 
   const isImage = file && /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name)
   const activeTask = TASK_BTNS.find(t => t.id === task) || TASK_BTNS[0]
@@ -91,6 +160,17 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
           </div>
         )}
 
+        {/* Recording indicator */}
+        {isRecording && (
+          <div className="mb-2 flex items-center gap-2 px-3.5 py-2 rounded-xl
+            bg-rose-500/10 border border-rose-500/20">
+            <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <span className="text-xs text-rose-400 font-medium">
+              {interimText ? `শুনছি... "${interimText}"` : 'শুনছি... কথা বলুন (Listening...)'}
+            </span>
+          </div>
+        )}
+
         {/* Input box */}
         <div
           className={`flex flex-col rounded-2xl border transition-all
@@ -105,28 +185,42 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
             onChange={e => { setText(e.target.value); grow() }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
             placeholder={
-              file     ? 'Ask about this file... (or press Send)' :
-              drag     ? 'Drop file here...' :
+              file ? 'Ask about this file... (or press Send)' :
+              drag ? 'Drop file here...' :
               disabled ? 'Start backend: python app.py' :
-              task==='tutor' ? 'তোমার question লেখো বাংলায় বা English এ...' :
-              task==='code'  ? 'Describe what to build or paste code to debug...' :
-                               'Ask RUBRA anything — weather, code, study help, research...'
+              task === 'tutor' ? 'তোমার question লেখো বাংলায় বা English এ... 🎙️ মাইক চাপো' :
+              task === 'code' ? 'Describe what to build or paste code to debug...' :
+              'Ask RUBRA anything — 🎙️ মাইক চাপে কথা বলো...'
             }
-            disabled={disabled}
+            disabled={disabled || isRecording}
             rows={1}
             className="w-full bg-transparent px-4 pt-3.5 pb-2 text-[14.5px] text-white/90
               placeholder-white/25 outline-none leading-relaxed max-h-[180px] overflow-y-auto"/>
 
           <div className="flex items-center justify-between px-3 pb-2.5">
             <div className="flex items-center gap-1">
+              {/* File attach */}
               <button onClick={() => fileRef.current?.click()} disabled={disabled}
-                title="Attach file or image (PDF, Excel, CSV, DOCX, JPG, PNG)"
+                title="Attach file or image"
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-white/28
                   hover:text-white/60 hover:bg-white/[.06] transition-all disabled:opacity-30">
                 <Paperclip size={15}/>
               </button>
               <input ref={fileRef} type="file" className="hidden" accept={ACCEPT_ALL}
                 onChange={e => handleFile(e.target.files?.[0])}/>
+              
+              {/* Voice input button */}
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={disabled || streaming}
+                title={isRecording ? 'Stop recording' : 'Voice input (বাংলায় কথা বলুন)'}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all
+                  ${isRecording
+                    ? 'bg-rose-500 text-white animate-pulse'
+                    : 'text-white/28 hover:text-rose-400 hover:bg-rose-500/10'
+                  } disabled:opacity-30`}>
+                {isRecording ? <MicOff size={15}/> : <Mic size={15}/>}
+              </button>
             </div>
 
             {streaming ? (
@@ -148,7 +242,7 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
         </div>
 
         <p className="text-[11px] text-white/18 text-center mt-2">
-          {activeTask.desc} · Bangla/English/Banglish সব ভাষায় কথা বলো · Drag & drop files & images
+          {activeTask.desc} · 🎙️ Bangla/English/Banglish সব ভাষায় কথা বলো · Voice Chat সাপোর্টেড
         </p>
       </div>
     </div>
