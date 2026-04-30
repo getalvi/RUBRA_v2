@@ -1,4 +1,4 @@
-// frontend/src/App.jsx — COMPLETE FILE WITH VOICE SUPPORT
+// frontend/src/App.jsx — COMPLETE FILE
 
 import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -10,7 +10,6 @@ import InputBar from './components/InputBar'
 import ArtifactPanel from './components/ArtifactPanel'
 import { getStatus } from './api/client'
 
-// ── Extract code blocks from assistant messages ──────────
 function extractArtifacts(messages) {
   const artifacts = []
   const seen = new Set()
