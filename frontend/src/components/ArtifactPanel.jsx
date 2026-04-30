@@ -20,39 +20,6 @@ function isRenderable(lang, code) {
   if (lang === 'javascript' && code.includes('document.')) return true
   return false
 }
-// Detect if code looks incomplete
-function isCodeIncomplete(code) {
-  if (!code || code.length < 100) return false
-  const trimmed = code.trimEnd()
-  // Check for RUBRA_CONTINUE marker
-  if (trimmed.endsWith('<!-- RUBRA_CONTINUE -->')) return true
-  // Check for obviously incomplete patterns
-  const incompletePatterns = [
-    /\/\/ \.{3}$/m,           // // ...
-    /# \.{3}$/m,              // # ...
-    /\/\* continues/im,        // /* continues
-    /\[rest/im,               // [rest
-    /TODO:/im,                // TODO:
-    /\.{3}\s*$/,              // ends with ...
-  ]
-  return incompletePatterns.some(p => p.test(trimmed))
-}
-// Auto-continue if RUBRA_CONTINUE marker detected
-useEffect(() => {
-  if (!streaming && artifact?.code && onContinue) {
-    const trimmed = artifact.code.trimEnd()
-    if (trimmed.endsWith('<!-- RUBRA_CONTINUE -->')) {
-      // Small delay then auto-continue
-      const timer = setTimeout(() => {
-        const lastChunk = artifact.code
-          .replace('<!-- RUBRA_CONTINUE -->', '')
-          .slice(-200)
-        onContinue(lastChunk)
-      }, 800)
-      return () => clearTimeout(timer)
-    }
-  }
-}, [streaming, artifact?.code])
 
 // ── Wrap JSX/JS into runnable HTML for iframe ────────────
 function wrapForPreview(lang, code) {
@@ -97,7 +64,7 @@ function wrapForPreview(lang, code) {
 // An artifact = { id, lang, code, title, timestamp }
 
 // ── Main Panel ───────────────────────────────────────────
-export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectArtifact, onContinue, streaming }) {
+export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectArtifact }) {
   const [tab, setTab]           = useState('code')   // 'code' | 'preview'
   const [copied, setCopied]     = useState(false)
   const [viewport, setViewport] = useState('desktop') // 'desktop' | 'mobile'
@@ -159,7 +126,6 @@ export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectAr
         borderColor: 'rgba(255,255,255,0.07)',
         width: fullscreen ? '100vw' : undefined,
       }}
-      
     >
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b flex-shrink-0"
@@ -347,32 +313,13 @@ export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectAr
         </AnimatePresence>
       </div>
 
-     {/* ── Footer ── */}
+      {/* ── Footer ── */}
       <div className="px-4 py-2 border-t flex items-center justify-between flex-shrink-0"
         style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.3)' }}>
         <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
           {artifact.code.split('\n').length} lines · {(artifact.code.length / 1024).toFixed(1)} KB
         </span>
-        <div className="flex items-center gap-2">
-          {/* Auto-continue button — shows when code looks incomplete */}
-          {!streaming && isCodeIncomplete(artifact.code) && onContinue && (
-            <button
-              onClick={() => {
-                const lastChunk = artifact.code.slice(-200)
-                onContinue(lastChunk)
-              }}
-              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-all"
-              style={{
-                color: '#38bdf8',
-                background: 'rgba(56,189,248,0.1)',
-                border: '1px solid rgba(56,189,248,0.25)',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(56,189,248,0.2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
-            >
-              <RefreshCw size={11}/> Continue
-            </button>
-          )}
+        <div className="flex items-center gap-3">
           <button
             onClick={copyCode}
             className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-all hover:bg-white/10"
@@ -392,4 +339,3 @@ export default function ArtifactPanel({ artifacts, activeId, onClose, onSelectAr
     </motion.div>
   )
 }
-
