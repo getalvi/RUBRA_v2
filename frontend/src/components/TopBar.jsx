@@ -175,7 +175,69 @@ export default function App() {
               onModeChange={setAppMode}
             />
           </div>
+// TopBar.jsx — ADD these props and voice button
 
+export default function TopBar({
+  onMenu,
+  agent,
+  intent,
+  streaming,
+  online,
+  onNew,
+  appMode,
+  artifactCount,
+  panelOpen,
+  onTogglePanel,
+  ttsEnabled,
+  isSpeaking,
+  onToggleTTS,
+}) {
+  // ... your existing TopBar code ...
+
+  // In the right-side buttons area, ADD:
+  return (
+    <div className="...">
+      {/* Left side */}
+      <div className="flex items-center gap-2">
+        <button onClick={onMenu} className="...">
+          {/* menu icon */}
+        </button>
+        {/* ... other left buttons ... */}
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-2">
+        {/* Voice Toggle */}
+        <button
+          onClick={onToggleTTS}
+          title={ttsEnabled ? '🔊 RUBRA speaks ON' : '🔇 RUBRA speaks OFF'}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+            isSpeaking
+              ? 'bg-rose-500/20 text-rose-400 animate-pulse'
+              : ttsEnabled
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'text-white/30 hover:text-white/60'
+          }`}>
+          {isSpeaking ? '🔊' : ttsEnabled ? '🔊' : '🔇'}
+        </button>
+
+        {/* Panel Toggle */}
+        {artifactCount > 0 && (
+          <button
+            onClick={onTogglePanel}
+            className={`... ${panelOpen ? 'bg-white/10' : ''}`}>
+            📄 {artifactCount}
+          </button>
+        )}
+
+        {/* New Chat */}
+        <button onClick={onNew} className="...">
+          +
+        </button>
+      </div>
+    </div>
+  )
+}
           {/* Artifact panel column */}
           <AnimatePresence>
             {panelOpen && artifacts.length > 0 && (
