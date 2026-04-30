@@ -6,8 +6,6 @@ import {
   speakWithClonedVoice,
   speakWithWebSpeech,
   stopAudio,
-  createSpeechRecognizer,
-  uploadVoiceSample,
 } from '../api/client'
 
 const BASE = import.meta.env.VITE_API_URL || ''
@@ -21,13 +19,9 @@ export function useChat() {
   const [intent, setIntent] = useState(null)
   const [toolResult, setToolResult] = useState(null)
   const [error, setError] = useState(null)
-  const [ttsEnabled, setTtsEnabled] = useState(false)        // NEW
-  const [voiceId, setVoiceId] = useState('rubra_voice')    // NEW
-  const [isSpeaking, setIsSpeaking] = useState(false)      // NEW
+  const [ttsEnabled, setTtsEnabled] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const stopRef = useRef(false)
-  const lastAssistantMsg = useRef('')
-
-  // ... existing addMsg, appendTok functions ...
 
   const addMsg = (role, content, extra = {}) => {
     const msg = { id: uid(), role, content, ts: Date.now(), ...extra }
@@ -39,28 +33,21 @@ export function useChat() {
     setMessages(prev => prev.map(m => m.id === id ? { ...m, content: m.content + tok } : m))
   }, [])
 
-  // ── Auto TTS when assistant finishes ─────────────────
   const speakLastMessage = useCallback(async (text) => {
     if (!ttsEnabled || !text.trim()) return
     setIsSpeaking(true)
-    lastAssistantMsg.current = text
     try {
-      await speakWithClonedVoice(text, voiceId)
+      await speakWithClonedVoice(text, 'rubra_voice')
     } catch (e) {
-      console.warn('Cloned voice failed, using fallback:', e)
       speakWithWebSpeech(text)
     }
     setIsSpeaking(false)
-  }, [ttsEnabled, voiceId])
+  }, [ttsEnabled])
 
-  // ── Send text message ────────────────────────────────
   const send = useCallback(async (text, taskType = null, mode = null) => {
     if (!text.trim() || streaming) return
     setError(null); setToolResult(null); stopRef.current = false
-    
-    // Stop any playing audio when user sends new message
-    stopAudio()
-    setIsSpeaking(false)
+    stopAudio(); setIsSpeaking(false)
     
     addMsg('user', text)
     setStreaming(true)
@@ -92,13 +79,8 @@ export function useChat() {
     }
     
     setStreaming(false)
+    if (fullResponse && !stopRef.current) speakLastMessage(fullResponse)
     
-    // Auto speak the complete response
-    if (fullResponse && !stopRef.current) {
-      speakLastMessage(fullResponse)
-    }
-    
-    // Save session
     setSessions(prev => {
       const upd = [{ id: sessionId, title: text.slice(0, 45), ts: Date.now() }, ...prev.filter(s => s.id !== sessionId)].slice(0, 30)
       saveLocal(upd)
@@ -106,48 +88,35 @@ export function useChat() {
     })
   }, [streaming, sessionId, appendTok, speakLastMessage])
 
-  // ── Send voice message (STT → send → TTS) ────────────
-  const sendVoice = useCallback(async (transcribedText) => {
-    if (!transcribedText.trim()) return
-    // Just send as text — TTS will auto-play response
-    await send(transcribedText, null, null)
-  }, [send])
+  const sendFile = useCallback(async (file, question = '', mode = '') => {
+    if (streaming) return
+    setStreaming(true); stopRef.current = false
+    const isImg = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name)
+    addMsg('user', `${isImg ? '🖼' : '📎'} ${file.name}${question ? ` — ${question}` : ''}`)
+    const aid = uid()
+    setMessages(prev => [...prev, { id: aid, role: 'assistant', content: '', ts: Date.now(), agent: mode === 'tutor' ? 'SmartTutorAgent' : 'FileAgent', intent: 'file' }])
+    try {
+      for await (const tok of apiStreamUpload({ file, sessionId, question, mode })) {
+        if (stopRef.current) break
+        appendTok(aid, tok)
+      }
+    } catch (e) {
+      setMessages(prev => prev.map(m => m.id === aid ? { ...m, content: `❌ ${e.message}`, isError: true } : m))
+    }
+    setStreaming(false)
+  }, [streaming, sessionId, appendTok])
 
-  // ── Toggle TTS ───────────────────────────────────────
   const toggleTTS = useCallback(() => {
     setTtsEnabled(prev => {
       const next = !prev
-      if (!next) {
-        stopAudio()
-        setIsSpeaking(false)
-      }
+      if (!next) { stopAudio(); setIsSpeaking(false) }
       return next
     })
   }, [])
 
-  // ── Stop everything ──────────────────────────────────
-  const stop = useCallback(() => {
-    stopRef.current = true
-    setStreaming(false)
-    stopAudio()
-    setIsSpeaking(false)
-  }, [])
-
-  // ... existing sendFile, newSession, loadSession, editResend ...
-
-  const sendFile = useCallback(async (file, question = '', mode = '') => {
-    // ... existing file upload logic ...
-  }, [streaming, sessionId, appendTok])
-
   const newSession = useCallback(() => {
-    setMessages([])
-    setSessionId(uid())
-    setAgent(null)
-    setIntent(null)
-    setToolResult(null)
-    setError(null)
-    stopAudio()
-    setIsSpeaking(false)
+    setMessages([]); setSessionId(uid()); setAgent(null); setIntent(null); setToolResult(null); setError(null)
+    stopAudio(); setIsSpeaking(false)
   }, [])
 
   const loadSession = useCallback(async (id) => {
@@ -165,31 +134,20 @@ export function useChat() {
     send(newText, taskType)
   }, [messages, send])
 
+  const stop = useCallback(() => {
+    stopRef.current = true
+    setStreaming(false)
+    stopAudio()
+    setIsSpeaking(false)
+  }, [])
+
   return {
-    messages,
-    streaming,
-    sessionId,
-    sessions,
-    agent,
-    intent,
-    toolResult,
-    error,
-    ttsEnabled,        // NEW
-    isSpeaking,        // NEW
-    voiceId,           // NEW
-    send,
-    sendFile,
-    sendVoice,         // NEW
-    toggleTTS,         // NEW
-    setVoiceId,        // NEW
-    newSession,
-    loadSession,
-    editResend,
-    stop,
+    messages, streaming, sessionId, sessions, agent, intent, toolResult, error,
+    ttsEnabled, isSpeaking,
+    send, sendFile, toggleTTS, newSession, loadSession, editResend, stop,
   }
 }
 
-// Local storage helpers
 function loadLocal() {
   try { return JSON.parse(localStorage.getItem('rubra_v6') || '[]') }
   catch { return [] }
