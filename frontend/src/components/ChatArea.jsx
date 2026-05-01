@@ -4,16 +4,17 @@ import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Message from './Message'
 import { Hexagon } from 'lucide-react'
+import { rubraVoice, SpeakerButton } from './VoiceButton' // ADDED: Imports for voice
 
 const STARTERS = [
-  { icon: '🌤', title: 'Live weather',   desc: 'Real-time any city',          q: "What's the weather in Dhaka right now?" },
-  { icon: '⚙',  title: 'Write code',     desc: 'Hermes Ultra Engine',          q: 'Build a glassmorphic React dashboard with live charts and dark mode' },
-  { icon: '🎓', title: 'Smart Tutor',    desc: 'SSC/HSC/JSC help',             q: 'SSC Physics er first chapter ta explain koro step by step' },
-  { icon: '🧮', title: 'Math solve',     desc: 'Step by step working',         q: 'Solve: x² + 5x + 6 = 0 and explain the quadratic formula' },
+  { icon: '🌤', title: 'Live weather',   desc: 'Real-time any city',         q: "What's the weather in Dhaka right now?" },
+  { icon: '⚙',  title: 'Write code',      desc: 'Hermes Ultra Engine',          q: 'Build a glassmorphic React dashboard with live charts and dark mode' },
+  { icon: '🎓', title: 'Smart Tutor',    desc: 'SSC/HSC/JSC help',              q: 'SSC Physics er first chapter ta explain koro step by step' },
+  { icon: '🧮', title: 'Math solve',      desc: 'Step by step working',         q: 'Solve: x² + 5x + 6 = 0 and explain the quadratic formula' },
   { icon: '₿',  title: 'Crypto prices', desc: 'Live BTC, ETH & more',         q: 'Current Bitcoin, Ethereum, Solana prices with 24h change?' },
-  { icon: '🖼',  title: 'Vision / PDF',  desc: 'Upload question paper',        q: null, isUpload: true },
-  { icon: '📝', title: 'Exam paper',    desc: 'SSC/HSC generate',             q: 'HSC Physics chapter 1 theke 15ta MCQ question paper banao' },
-  { icon: '🌐', title: 'Latest news',   desc: 'Live internet knowledge',      q: 'What are the biggest tech news stories happening right now?' },
+  { icon: '🖼',  title: 'Vision / PDF',   desc: 'Upload question paper',         q: null, isUpload: true },
+  { icon: '📝', title: 'Exam paper',    desc: 'SSC/HSC generate',              q: 'HSC Physics chapter 1 theke 15ta MCQ question paper banao' },
+  { icon: '🌐', title: 'Latest news',   desc: 'Live internet knowledge',       q: 'What are the biggest tech news stories happening right now?' },
 ]
 
 function Welcome({ onSuggest }) {
@@ -195,37 +196,60 @@ export default function ChatArea({
 }) {
   const bottomRef = useRef()
 
+  // Existing scroll effect
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // ADDED: Auto-speak new assistant messages
+  useEffect(() => {
+    if (!messages.length) return
+    const last = messages[messages.length - 1]
+    if (last.role === 'assistant' && !streaming && last.content) {
+      // Only speak if not too long (avoid reading entire essays)
+      const text = last.content
+        .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/gi, '') // remove XML tags
+        .trim()
+      if (text.length < 2000) {
+        rubraVoice.speak(text, last.lang || 'en')
+      }
+    }
+  }, [messages, streaming])
+
   return (
-    <div className="flex-1 overflow-y-auto">
-      {online === false && <OfflineBanner />}
-      {messages.length === 0 ? (
-        <div className="flex flex-col h-full">
-          <Welcome onSuggest={onSuggest} />
-        </div>
-      ) : (
-        <div className="py-4 max-w-4xl mx-auto w-full">
-          {messages.map((msg, i) => {
-            const isLast = i === messages.length - 1 && msg.role === 'assistant'
-            return (
-              <div key={msg.id}>
-                {isLast && toolResult && <ToolBadge tool={toolResult} />}
-                <Message
-                  msg={msg}
-                  isStreaming={isLast && streaming}
-                  onEdit={msg.role === 'user' ? onEdit : null}
-                  artifacts={artifacts}
-                  onOpenPanel={onOpenArtifact}
-                />
-              </div>
-            )
-          })}
-          <div ref={bottomRef} className="h-4" />
-        </div>
-      )}
+    <div className="flex-1 flex flex-col min-h-0 relative">
+      {/* ADDED: SpeakerButton in the TopBar/Header area */}
+      <div className="absolute top-4 right-6 z-10">
+        <SpeakerButton />
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {online === false && <OfflineBanner />}
+        {messages.length === 0 ? (
+          <div className="flex flex-col h-full">
+            <Welcome onSuggest={onSuggest} />
+          </div>
+        ) : (
+          <div className="py-4 max-w-4xl mx-auto w-full">
+            {messages.map((msg, i) => {
+              const isLast = i === messages.length - 1 && msg.role === 'assistant'
+              return (
+                <div key={msg.id}>
+                  {isLast && toolResult && <ToolBadge tool={toolResult} />}
+                  <Message
+                    msg={msg}
+                    isStreaming={isLast && streaming}
+                    onEdit={msg.role === 'user' ? onEdit : null}
+                    artifacts={artifacts}
+                    onOpenPanel={onOpenArtifact}
+                  />
+                </div>
+              )
+            })}
+            <div ref={bottomRef} className="h-4" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
