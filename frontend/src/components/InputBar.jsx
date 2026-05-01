@@ -1,23 +1,26 @@
+// InputBar.jsx — Voice integration patch
+import VoiceButton from './VoiceButton'
 import { useState, useRef, useCallback } from 'react'
 import { Send, Square, Paperclip, Code2, Search, FileText, Zap, GraduationCap, X, Image } from 'lucide-react'
 
 const TASK_BTNS = [
-  { id: null,     icon: Zap,            label: 'Auto',   desc: 'RUBRA picks best agent',        cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' },
-  { id: 'code',   icon: Code2,          label: 'Code',   desc: 'Hermes Coding Engine',           cls: 'text-sky-400 bg-sky-500/10 border-sky-500/25' },
+  { id: null,      icon: Zap,           label: 'Auto',   desc: 'RUBRA picks best agent',        cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' },
+  { id: 'code',    icon: Code2,          label: 'Code',   desc: 'Hermes Coding Engine',           cls: 'text-sky-400 bg-sky-500/10 border-sky-500/25' },
   { id: 'search', icon: Search,         label: 'Search', desc: 'Live data: weather, crypto, ...',cls: 'text-amber-400 bg-amber-500/10 border-amber-500/25' },
-  { id: 'tutor',  icon: GraduationCap,  label: 'Tutor',  desc: 'Smart Tutor — Bangladesh curriculum', cls: 'text-violet-400 bg-violet-500/10 border-violet-500/25' },
-  { id: 'file',   icon: FileText,       label: 'File',   desc: 'PDF, Excel, CSV, DOCX, Image',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/25' },
+  { id: 'tutor',   icon: GraduationCap,  label: 'Tutor',  desc: 'Smart Tutor — Bangladesh curriculum', cls: 'text-violet-400 bg-violet-500/10 border-violet-500/25' },
+  { id: 'file',    icon: FileText,       label: 'File',   desc: 'PDF, Excel, CSV, DOCX, Image',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/25' },
 ]
 
 const ACCEPT_ALL = ".pdf,.xlsx,.xls,.csv,.docx,.doc,.txt,.md,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.json,.yaml,.sh,.cpp,.c,.html,.css,.jpg,.jpeg,.png,.gif,.webp,.bmp"
 
-export default function InputBar({ onSend, onFile, onStop, streaming, disabled }) {
+// STEP 2: Add lang prop to the function arguments
+export default function InputBar({ onSend, onFile, onStop, streaming, disabled, lang = 'en' }) {
   const [text, setText]   = useState('')
   const [task, setTask]   = useState(null)
   const [file, setFile]   = useState(null)
   const [fileQ, setFileQ] = useState('')
   const [drag, setDrag]   = useState(false)
-  const taRef   = useRef()
+  const taRef    = useRef()
   const fileRef = useRef()
 
   const grow = () => {
@@ -26,6 +29,16 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 180) + 'px'
   }
+
+  // STEP 3: Add onTranscript handler
+  const handleVoiceTranscript = useCallback((transcript) => {
+    setText(prev => prev ? prev + ' ' + transcript : transcript)
+    if (taRef.current) {
+      taRef.current.style.height = 'auto'
+      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 180) + 'px'
+      taRef.current.focus()
+    }
+  }, [])
 
   const submit = useCallback(() => {
     if (disabled || streaming) return
@@ -105,8 +118,8 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
             onChange={e => { setText(e.target.value); grow() }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
             placeholder={
-              file     ? 'Ask about this file... (or press Send)' :
-              drag     ? 'Drop file here...' :
+              file      ? 'Ask about this file... (or press Send)' :
+              drag      ? 'Drop file here...' :
               disabled ? 'Start backend: python app.py' :
               task==='tutor' ? 'তোমার question লেখো বাংলায় বা English এ...' :
               task==='code'  ? 'Describe what to build or paste code to debug...' :
@@ -125,6 +138,14 @@ export default function InputBar({ onSend, onFile, onStop, streaming, disabled }
                   hover:text-white/60 hover:bg-white/[.06] transition-all disabled:opacity-30">
                 <Paperclip size={15}/>
               </button>
+              
+              {/* STEP 4: Added VoiceButton right after the Paperclip button */}
+              <VoiceButton 
+                onTranscript={handleVoiceTranscript}
+                lang={lang}
+                disabled={disabled}
+              />
+
               <input ref={fileRef} type="file" className="hidden" accept={ACCEPT_ALL}
                 onChange={e => handleFile(e.target.files?.[0])}/>
             </div>
