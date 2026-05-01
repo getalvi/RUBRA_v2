@@ -1,15 +1,18 @@
+// TopBar.jsx — Add SpeakerButton
 import { Menu, Plus, Hexagon, Loader2 } from 'lucide-react'
+import { SpeakerButton } from './VoiceButton' // STEP 1: Add import
 
 const AGENT_INFO = {
   GeneralAgent:    { label: '🧠 Think',  dot: '#e11d48' },
-  CodingAgent:     { label: '⚙ Code',   dot: '#38bdf8' },
-  SearchAgent:     { label: '🔍 Search', dot: '#fbbf24' },
-  FileAgent:       { label: '📄 File',   dot: '#a78bfa' },
+  CodingAgent:      { label: '⚙ Code',   dot: '#38bdf8' },
+  SearchAgent:      { label: '🔍 Search', dot: '#fbbf24' },
+  FileAgent:        { label: '📄 File',   dot: '#a78bfa' },
   SmartTutorAgent: { label: '🎓 Tutor',  dot: '#a78bfa' },
-  FastChatAgent:   { label: '💬 Chat',   dot: '#4ade80' },
+  FastChatAgent:    { label: '💬 Chat',   dot: '#4ade80' },
 }
 
-export default function TopBar({ onMenu, agent, intent, streaming, online, onNew }) {
+// STEP 2: Added panelOpen and onTogglePanel to props
+export default function TopBar({ onMenu, agent, intent, streaming, online, onNew, panelOpen, onTogglePanel }) {
   const info = AGENT_INFO[agent] || null
 
   return (
@@ -68,9 +71,14 @@ export default function TopBar({ onMenu, agent, intent, streaming, online, onNew
           </div>
         )}
 
-        <button onClick={onNew} className="p-1.5 text-white/40 hover:text-white transition-colors" title="New chat">
-          <Plus size={17} />
-        </button>
+        {/* STEP 3: Place SpeakerButton in action area */}
+        <div className="flex items-center gap-1">
+          <SpeakerButton />
+          
+          <button onClick={onNew} className="p-1.5 text-white/40 hover:text-white transition-colors" title="New chat">
+            <Plus size={17} />
+          </button>
+        </div>
       </div>
     </header>
   )
