@@ -9,6 +9,7 @@ import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import ArtifactPanel from './components/ArtifactPanel'
 import { getStatus } from './api/client'
+import LiveModal, { LiveModeButton } from './components/LiveController'
 
 // ── Extract code blocks from assistant messages ──────────
 function extractArtifacts(messages) {
@@ -60,6 +61,7 @@ function extractArtifacts(messages) {
 export default function App() {
   const chat = useChat()
   const [sidebarOpen, setSidebar]       = useState(false)
+  const [liveOpen, setLiveOpen]         = useState(false)
   const [online, setOnline]             = useState(null)
   const [appMode, setAppMode]           = useState(null)
 
