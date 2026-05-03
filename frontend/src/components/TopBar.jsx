@@ -1,6 +1,7 @@
-// TopBar.jsx — Add SpeakerButton
+// TopBar.jsx — Final Fix for Live Button
 import { Menu, Plus, Hexagon, Loader2 } from 'lucide-react'
-import { SpeakerButton } from './VoiceButton' // STEP 1: Add import
+import { SpeakerButton } from './VoiceButton'
+import { LiveModeButton } from './LiveController' // Ekhane import thakbe
 
 const AGENT_INFO = {
   GeneralAgent:    { label: '🧠 Think',  dot: '#e11d48' },
@@ -11,8 +12,11 @@ const AGENT_INFO = {
   FastChatAgent:    { label: '💬 Chat',   dot: '#4ade80' },
 }
 
-// STEP 2: Added panelOpen and onTogglePanel to props
-export default function TopBar({ onMenu, agent, intent, streaming, online, onNew, panelOpen, onTogglePanel }) {
+// Props-e liveActive ar onLiveToggle thakte hobe
+export default function TopBar({ 
+  onMenu, agent, intent, streaming, online, onNew, 
+  panelOpen, onTogglePanel, liveActive, onLiveToggle 
+}) {
   const info = AGENT_INFO[agent] || null
 
   return (
@@ -29,7 +33,6 @@ export default function TopBar({ onMenu, agent, intent, streaming, online, onNew
         </div>
       </div>
 
-      {/* Center — mode badge */}
       <div className="flex items-center">
         {streaming && info ? (
           <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[.04] text-xs">
@@ -45,34 +48,19 @@ export default function TopBar({ onMenu, agent, intent, streaming, online, onNew
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Backend status */}
-        {online === false && (
-          <a
-            href="https://huggingface.co/spaces"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Backend offline — Click to check HuggingFace Space, or set VITE_API_URL in Vercel"
-            className="flex items-center gap-1.5 text-xs text-rose-400 px-2.5 py-1 rounded-md
-              bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/15 transition-colors cursor-pointer">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-            <span className="hidden sm:inline">Backend offline</span>
-          </a>
-        )}
+        {/* Connection status display logic (Connected/Offline) thakbe ekhane */}
         {online === true && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400 mr-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="hidden sm:inline">Connected</span>
           </div>
         )}
-        {online === null && (
-          <div className="flex items-center gap-1.5 text-xs text-white/30">
-            <Loader2 size={11} className="animate-spin" />
-            <span className="hidden sm:inline">Connecting...</span>
-          </div>
-        )}
 
-        {/* STEP 3: Place SpeakerButton in action area */}
+        {/* STEP 3 Fix: Live button and Speaker button */}
         <div className="flex items-center gap-1">
+          {/* Ekhane button-ta render korte hobe */}
+          <LiveModeButton onClick={onLiveToggle} active={liveActive} />
+          
           <SpeakerButton />
           
           <button onClick={onNew} className="p-1.5 text-white/40 hover:text-white transition-colors" title="New chat">
