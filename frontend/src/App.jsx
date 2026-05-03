@@ -1,4 +1,4 @@
-// frontend/src/App.jsx — REPLACE ENTIRE FILE
+// frontend/src/App.jsx — Live Mode integration included
 
 import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -9,6 +9,7 @@ import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import ArtifactPanel from './components/ArtifactPanel'
 import { getStatus } from './api/client'
+// STEP 1: Import Live Mode components
 import LiveModal, { LiveModeButton } from './components/LiveController'
 
 // ── Extract code blocks from assistant messages ──────────
@@ -25,17 +26,13 @@ function extractArtifacts(messages) {
       const lang = (match[1] || 'code').toLowerCase()
       const code = match[2].trim()
 
-      // Only surface substantial code (>5 lines or >200 chars)
       if (code.split('\n').length < 4 && code.length < 200) continue
-      // Skip bash/shell/cmd — not useful to preview
       if (['bash','sh','shell','cmd','powershell','text','txt','markdown','md'].includes(lang)) continue
 
-      // Deduplicate by first 80 chars of code
       const key = lang + ':' + code.slice(0, 80)
       if (seen.has(key)) continue
       seen.add(key)
 
-      // Generate a title from first comment or function name or fallback
       let title = ''
       const commentMatch   = code.match(/(?:\/\/|#|\/\*)\s*(.{4,50}?)(?:\*\/|\n|$)/)
       const functionMatch  = code.match(/(?:function|def|class|const|let|var)\s+([A-Za-z][A-Za-z0-9_]{2,30})/)
@@ -61,31 +58,26 @@ function extractArtifacts(messages) {
 export default function App() {
   const chat = useChat()
   const [sidebarOpen, setSidebar]       = useState(false)
+  // STEP 2: Added liveOpen state
   const [liveOpen, setLiveOpen]         = useState(false)
   const [online, setOnline]             = useState(null)
   const [appMode, setAppMode]           = useState(null)
 
-  // Artifact panel state
   const [panelOpen, setPanelOpen]       = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState(null)
 
-  // Derive artifacts from all messages
   const artifacts = extractArtifacts(chat.messages)
 
-  // Auto-open panel when a new coding response arrives
   useEffect(() => {
     if (artifacts.length > 0) {
       const latest = artifacts[artifacts.length - 1]
-      // Only auto-open when a new artifact appears (not already open)
       setActiveArtifactId(latest.id)
-      // Auto-open if coding agent or code task
       if (chat.intent === 'code' || chat.agent === 'CodingAgent') {
         setPanelOpen(true)
       }
     }
   }, [artifacts.length, chat.intent, chat.agent])
 
-  // Close panel when new session starts
   useEffect(() => {
     if (chat.messages.length === 0) {
       setPanelOpen(false)
@@ -103,16 +95,14 @@ export default function App() {
   }, [])
 
   const handleSend = (message, taskType = null, mode = null) => {
-  chat.send(message, taskType, mode || appMode)
-}
+    chat.send(message, taskType, mode || appMode)
+  }
 
-// Add this new function
-const handleArtifactContinue = useCallback((lastChunk) => {
-  const continueMsg = `[RUBRA_CONTINUE]${lastChunk}`
-  chat.send(continueMsg, 'code', null)
-}, [chat])
+  const handleArtifactContinue = useCallback((lastChunk) => {
+    const continueMsg = `[RUBRA_CONTINUE]${lastChunk}`
+    chat.send(continueMsg, 'code', null)
+  }, [chat])
 
-  // Called from Message.jsx "Open in Panel" button
   const handleOpenArtifact = useCallback((artifactId) => {
     setActiveArtifactId(artifactId)
     setPanelOpen(true)
@@ -120,7 +110,6 @@ const handleArtifactContinue = useCallback((lastChunk) => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0f0f0f] text-white">
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 lg:hidden"
@@ -128,7 +117,6 @@ const handleArtifactContinue = useCallback((lastChunk) => {
         />
       )}
 
-      {/* Left sidebar */}
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebar(false)}
@@ -138,8 +126,8 @@ const handleArtifactContinue = useCallback((lastChunk) => {
         onLoad={(id) => { chat.loadSession(id); setSidebar(false) }}
       />
 
-      {/* Main content area — splits when panel is open */}
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+        {/* STEP 3: Pass liveActive and onLiveToggle to TopBar */}
         <TopBar
           onMenu={() => setSidebar(true)}
           agent={chat.agent}
@@ -148,16 +136,14 @@ const handleArtifactContinue = useCallback((lastChunk) => {
           online={online}
           onNew={chat.newSession}
           appMode={appMode}
-          // Panel toggle button for TopBar (optional)
           artifactCount={artifacts.length}
           panelOpen={panelOpen}
           onTogglePanel={() => setPanelOpen(p => !p)}
+          liveActive={liveOpen}
+          onLiveToggle={() => setLiveOpen(l => !l)}
         />
 
-        {/* Split layout: chat + artifact panel */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
-
-          {/* Chat column */}
           <div className={`flex flex-col min-w-0 transition-all duration-300 ${
             panelOpen ? 'flex-[1_1_0] min-w-[320px]' : 'flex-1'
           }`}>
@@ -184,7 +170,6 @@ const handleArtifactContinue = useCallback((lastChunk) => {
             />
           </div>
 
-          {/* Artifact panel column */}
           <AnimatePresence>
             {panelOpen && artifacts.length > 0 && (
               <div className="hidden md:flex flex-col"
@@ -202,6 +187,17 @@ const handleArtifactContinue = useCallback((lastChunk) => {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* STEP 4: Live Modal integration */}
+      <AnimatePresence>
+        {liveOpen && (
+          <LiveModal
+            sessionId={chat.sessionId || 'default'}
+            onClose={() => setLiveOpen(false)}
+            onMessage={(msg) => chat.addMessage?.(msg)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
