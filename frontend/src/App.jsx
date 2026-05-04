@@ -9,6 +9,7 @@ import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import ArtifactPanel from './components/ArtifactPanel'
 import { getStatus } from './api/client'
+import LiveModal, { LiveModeButton } from './components/LiveController'
 
 // ── Extract code blocks from assistant messages ──────────
 function extractArtifacts(messages) {
@@ -65,10 +66,12 @@ export default function App() {
 
   // Artifact panel state
   const [panelOpen, setPanelOpen]       = useState(false)
+  const [liveOpen, setLiveOpen]         = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState(null)
 
   // Derive artifacts from all messages
   const artifacts = extractArtifacts(chat.messages)
+  
 
   // Auto-open panel when a new coding response arrives
   useEffect(() => {
@@ -145,6 +148,7 @@ export default function App() {
           panelOpen={panelOpen}
           onTogglePanel={() => setPanelOpen(p => !p)}
         />
+        <LiveModeButton onClick={() => setLiveOpen(l => !l)} active={liveOpen} />
 
         {/* Split layout: chat + artifact panel */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -188,6 +192,15 @@ export default function App() {
                   onSelectArtifact={setActiveArtifactId}
                 />
               </div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+           {liveOpen && (
+              <LiveModal
+              sessionId={chat.sessionId || 'live'}
+              onClose={() => setLiveOpen(false)}
+              onMessage={(msg) => chat.addMessage?.(msg)}
+              />
             )}
           </AnimatePresence>
         </div>
