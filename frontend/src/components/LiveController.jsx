@@ -272,6 +272,15 @@ function useRubraLive(sessionId, callbacks) {
   } catch (err) { onStatus(`Mic: ${err.message}`) }
 }, [connected, listening, speaking, send, onStatus])
 
+  // ADDED missing stopMic function to prevent ReferenceError crash
+  const stopMic = useCallback(() => {
+    if (audio.current) {
+      audio.current.stop()
+      audio.current = null
+    }
+    setListening(false)
+  }, [])
+
   // ── Text ─────────────────────────────────────────────
   const sendText = useCallback((text) => {
     if (!connected || !text.trim()) return
@@ -331,8 +340,8 @@ function useRubraLive(sessionId, callbacks) {
 //  LIVE MODAL — Gemini Live Style Full Screen
 // ══════════════════════════════════════════════════════
 export default function LiveModal({ sessionId, onClose, onMessage }) {
-  const [status,     setStatus]     = useState('disconnected')
-  const [tokens,     setTokens]     = useState('')
+  const [status,      setStatus]     = useState('disconnected')
+  const [tokens,      setTokens]     = useState('')
   const [transcript, setTranscript] = useState('')
   const [audioOn,    setAudioOn]    = useState(true)
   const videoRef = useRef(null)
