@@ -1,5 +1,3 @@
-// frontend/src/components/LiveController.jsx — REPLACE ENTIRE FILE
-
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, X, Volume2, VolumeX } from 'lucide-react'
