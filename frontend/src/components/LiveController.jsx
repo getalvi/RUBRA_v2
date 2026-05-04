@@ -11,36 +11,76 @@ const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:7860')
 //  AUDIO PROCESSOR
 // ══════════════════════════════════════════════════════
 class AudioProcessor {
-  constructor(onChunk, onEnd) {
-    this.onChunk = onChunk; this.onEnd = onEnd
-    this.mediaRec = null; this.stream = null
-    this.silenceTimer = null; this.active = false
+  constructor(onChunk, onSilence) {
+    this.onChunk   = onChunk
+    this.onSilence = onSilence   // called when silence detected
+    this.mediaRec  = null
+    this.stream    = null
+    this.active    = false
+
+    // VAD state
+    this.audioCtx    = null
+    this.analyser    = null
+    this.vadInterval = null
+    this.silenceMs   = 0
+    this.SILENCE_THRESHOLD = 1800  // 1.8s silence → send
+    this.ENERGY_MIN  = 8           // minimum RMS to count as speech
   }
+
   async start() {
     this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+      audio: {
+        sampleRate: 16000, channelCount: 1,
+        echoCancellation: true, noiseSuppression: true, autoGainControl: true
+      }
     })
+
+    // VAD via Web Audio API
+    this.audioCtx  = new (window.AudioContext || window.webkitAudioContext)()
+    const source   = this.audioCtx.createMediaStreamSource(this.stream)
+    this.analyser  = this.audioCtx.createAnalyser()
+    this.analyser.fftSize = 512
+    source.connect(this.analyser)
+
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus' : 'audio/webm'
-    this.mediaRec = new MediaRecorder(this.stream, { mimeType })
-    this.active = true
+    this.mediaRec  = new MediaRecorder(this.stream, { mimeType })
+    this.active    = true
+
     this.mediaRec.ondataavailable = async (e) => {
       if (e.data.size > 100 && this.active) {
         const buf = await e.data.arrayBuffer()
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
         this.onChunk(b64)
-        clearTimeout(this.silenceTimer)
-        this.silenceTimer = setTimeout(() => { if (this.active) this._stop() }, 1500)
       }
     }
-    this.mediaRec.start(300)
+    this.mediaRec.start(400)  // chunk every 400ms
+
+    // VAD loop — check energy every 100ms
+    const data = new Uint8Array(this.analyser.frequencyBinCount)
+    this.vadInterval = setInterval(() => {
+      if (!this.active) return
+      this.analyser.getByteFrequencyData(data)
+      const rms = Math.sqrt(data.reduce((s, v) => s + v*v, 0) / data.length)
+
+      if (rms < this.ENERGY_MIN) {
+        this.silenceMs += 100
+        if (this.silenceMs >= this.SILENCE_THRESHOLD) {
+          this.silenceMs = 0
+          this.onSilence()  // silence detected → trigger send
+        }
+      } else {
+        this.silenceMs = 0  // reset on speech
+      }
+    }, 100)
   }
-  _stop() {
-    if (this.mediaRec?.state === 'recording') { this.mediaRec.stop(); this.onEnd() }
-  }
+
   stop() {
-    this.active = false; clearTimeout(this.silenceTimer); this._stop()
+    this.active = false
+    clearInterval(this.vadInterval)
+    if (this.mediaRec?.state === 'recording') this.mediaRec.stop()
     this.stream?.getTracks().forEach(t => t.stop())
+    try { this.audioCtx?.close() } catch {}
   }
 }
 
@@ -96,15 +136,23 @@ class StreamingPlayer {
     if (this.ctx.state === 'suspended') this.ctx.resume()
   }
   async play(b64) {
-    if (!this.enabled) return
-    this._init()
-    try {
-      const raw = atob(b64); const buf = new Uint8Array(raw.length)
-      for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i)
-      const audio = await this.ctx.decodeAudioData(buf.buffer)
-      this.queue.push(audio); if (!this.playing) this._next()
-    } catch {}
+  if (!this.enabled) return
+  this._init()
+  try {
+    // Proper base64 decode
+    const binary = atob(b64)
+    const bytes  = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+    // Decode MP3
+    const cloned = bytes.buffer.slice(0)  // clone — decodeAudioData consumes buffer
+    const audioBuf = await this.ctx.decodeAudioData(cloned)
+    this.queue.push(audioBuf)
+    if (!this.playing) this._next()
+  } catch (e) {
+    console.warn('TTS decode error:', e)
   }
+}
   _next() {
     if (!this.queue.length || !this.enabled) { this.playing = false; return }
     this.playing = true
@@ -204,22 +252,25 @@ function useRubraLive(sessionId, callbacks) {
   }, [send])
 
   // ── Mic ──────────────────────────────────────────────
-  const startMic = useCallback(async () => {
-    if (!connected || listening) return
-    if (speaking) { send({ type: 'interrupt' }); player.current.stop() }
-    try {
-      const proc = new AudioProcessor(
-        (b64) => send({ type: 'audio_chunk', data: b64 }),
-        ()    => { send({ type: 'audio_end' }); setListening(false) }
-      )
-      await proc.start()
-      audio.current = proc; setListening(true)
-    } catch (err) { onStatus(`Mic: ${err.message}`) }
-  }, [connected, listening, speaking, send, onStatus])
-
-  const stopMic = useCallback(() => {
-    audio.current?.stop(); setListening(false)
-  }, [])
+ const startMic = useCallback(async () => {
+  if (!connected || listening) return
+  if (speaking) { send({ type: 'interrupt' }); player.current.stop() }
+  try {
+    const proc = new AudioProcessor(
+      // chunk ready → send to backend
+      (b64) => send({ type: 'audio_chunk', data: b64 }),
+      // VAD silence detected → trigger transcription
+      () => {
+        send({ type: 'audio_end' })
+        // Keep listening — VAD auto-continues
+        // Don't stop mic, just signal end of utterance
+      }
+    )
+    await proc.start()
+    audio.current = proc
+    setListening(true)
+  } catch (err) { onStatus(`Mic: ${err.message}`) }
+}, [connected, listening, speaking, send, onStatus])
 
   // ── Text ─────────────────────────────────────────────
   const sendText = useCallback((text) => {
