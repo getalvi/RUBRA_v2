@@ -1,4 +1,4 @@
-// frontend/src/components/LiveController.jsx — REPLACE ENTIRE FILE
+// frontend/src/components/LiveController.jsx — 
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -103,9 +103,15 @@ class VisionProcessor {
     this.video.playsInline = true
   }
   async startCamera() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ video:  width: 640, height: 480, facingMode: { ideal: "environment" } })
-    this._capture()
-  }
+  this.stream = await navigator.mediaDevices.getUserMedia({ 
+    video: { 
+      width: 640, 
+      height: 480, 
+      facingMode: { ideal: "environment" } 
+    } 
+  })
+  this._capture()
+}
   async startScreen() {
     this.stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
     this._capture()
