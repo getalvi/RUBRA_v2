@@ -253,9 +253,9 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     sock.onclose = (e) => {
       setConnected(false); setListening(false); setSpeaking(false)
       onStatus('disconnected')
-      if (e.code !== 1000 && retries.current < 3) {
+      if (e.code !== 1000 && retries.current < 5) {
         retries.current++
-        reconnT.current = setTimeout(connect, 2000 * retries.current)
+        reconnT.current = setTimeout(connect, 1000)  
       }
     }
 
