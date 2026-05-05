@@ -268,6 +268,17 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       try {
         const msg = JSON.parse(e.data)
         switch (msg.type) {
+          case 'idle':
+            setListening(false)
+            setSpeaking(false)
+            onStatus('ready')
+            break
+          
+          case 'listening':
+            setListening(true)
+            setSpeaking(false)
+            onStatus('listening')
+            break
           case 'ready':
             onStatus('ready')
             break
