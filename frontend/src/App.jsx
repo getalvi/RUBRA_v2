@@ -63,8 +63,8 @@ export default function App() {
   const [panelOpen, setPanelOpen]       = useState(false)
   const [liveOpen, setLiveOpen]         = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState(null)
-
   const artifacts = extractArtifacts(chat.messages)
+
 
   useEffect(() => {
     if (artifacts.length > 0) {
@@ -120,7 +120,6 @@ export default function App() {
       />
 
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
-        {/* Pass live props to TopBar */}
         <TopBar
           onMenu={() => setSidebar(true)}
           agent={chat.agent}
@@ -179,13 +178,14 @@ export default function App() {
         </div>
       </div>
 
-      {/* Live Modal is outside main content div for better stacking */}
+      {/* Live Modal — renders only when liveOpen, auto-connects on mount */}
       <AnimatePresence>
         {liveOpen && (
           <LiveModal
             sessionId={chat.sessionId || 'live'}
             onClose={() => setLiveOpen(false)}
             onAddMessage={(msg) => chat.addMessage?.(msg)}
+            autoConnect={true}
           />
         )}
       </AnimatePresence>
