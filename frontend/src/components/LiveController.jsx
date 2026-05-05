@@ -237,6 +237,7 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Connect ─────────────────────────────────────────
   const connect = useCallback(() => {
+    alert('Connecting to: ' + WS_BASE)
     if (ws.current?.readyState === WebSocket.OPEN) return
     const url  = `${WS_BASE}/ws/live/${sessionId}`
     const sock = new WebSocket(url)
@@ -258,7 +259,10 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       }
     }
 
-    sock.onerror = () => { onStatus('error') }
+    sock.onerror = (e) => { 
+  onStatus('error')
+  alert('WS Error: ' + WS_BASE + '/ws/live/' + sessionId)
+}
 
     sock.onmessage = (e) => {
       try {
