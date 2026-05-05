@@ -216,13 +216,11 @@ class StreamingPlayer {
 //  useRubraLive HOOK
 // ══════════════════════════════════════════════════════
 function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage }) {
-  const ws         = useRef(null)
+  const esRef      = useRef(null)
   const audioProc  = useRef(null)
   const visionProc = useRef(null)
   const player     = useRef(new StreamingPlayer())
-  const reconnT    = useRef(null)
-  const retries    = useRef(0)
-  const fullResp   = useRef('')   // accumulate full response
+  const fullResp   = useRef('')
 
   const [connected,   setConnected]   = useState(false)
   const [listening,   setListening]   = useState(false)
@@ -230,93 +228,30 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
   const [visionMode,  setVisionMode]  = useState(null)
   const [videoStream, setVideoStream] = useState(null)
 
-  const send = useCallback((data) => {
-    if (ws.current?.readyState === WebSocket.OPEN)
-      ws.current.send(JSON.stringify(data))
-  }, [])
-
-  // ── Connect ─────────────────────────────────────────
+  // ── Connect via SSE ──────────────────────────────────
   const connect = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) return
-    const url  = `${WS_BASE}/ws/live/${sessionId}`
-    const sock = new WebSocket(url)
-    ws.current = sock
+    if (esRef.current) esRef.current.close()
 
-    sock.onopen = () => {
-      setConnected(true)
-      onStatus('ready')
-      retries.current = 0
-      clearTimeout(reconnT.current)
-    }
+    const url = `${API_URL}/api/live/stream/${sessionId}`
+    const es  = new EventSource(url)
+    esRef.current = es
 
-    sock.onclose = (e) => {
-      setConnected(false); setListening(false); setSpeaking(false)
-      onStatus('disconnected')
-      if (e.code !== 1000 && retries.current < 5) {
-        retries.current++
-        reconnT.current = setTimeout(connect, 1000)  
-      }
-    }
+    es.onopen = () => { setConnected(true); onStatus('ready') }
+    es.onerror = () => { setConnected(false); onStatus('error') }
 
-    sock.onerror = (e) => { 
-  onStatus('error')
-  alert('WS Error: ' + WS_BASE + '/ws/live/' + sessionId)
-}
-
-    sock.onmessage = (e) => {
+    es.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
         switch (msg.type) {
-          case 'idle':
-            setListening(false)
-            setSpeaking(false)
-            onStatus('ready')
-            break
-          
-          case 'listening':
-            setListening(true)
-            setSpeaking(false)
-            onStatus('listening')
-            break
-          case 'ready':
-            onStatus('ready')
-            break
-
-          case 'thinking':
-            onStatus('thinking')
-            fullResp.current = ''
-            break
-
-          // ── Transcript: user's speech → show in chat ──
-          case 'transcript':
-            onTranscript(msg.text)
-            // Add user message to chat immediately
-            onAddMessage({ role: 'user', content: msg.text, fromLive: true })
-            break
-
-          // ── Token: RUBRA's response streaming ──────────
+          case 'ready':       onStatus('ready'); break
+          case 'thinking':    onStatus('thinking'); fullResp.current = ''; break
           case 'token':
             fullResp.current += msg.content
             onToken(msg.content)
             setSpeaking(true)
             break
-
-          // ── TTS audio chunk ────────────────────────────
-          case 'tts_chunk':
-            player.current.play(msg.audio_b64)
-            break
-
-          // ── TTS fallback text ──────────────────────────
-          case 'tts_text':
-            player.current.speakFallback(msg.text)
-            break
-
-          case 'interrupted':
-            player.current.stop()
-            setSpeaking(false)
-            break
-
-          // ── Response complete: add to chat ─────────────
+          case 'tts_chunk':   player.current.play(msg.audio_b64); break
+          case 'tts_text':    player.current.speakFallback(msg.text); break
           case 'done':
             setSpeaking(false)
             onStatus('ready')
@@ -325,56 +260,66 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
               fullResp.current = ''
             }
             break
-
-          case 'error':
-            onStatus('error')
-            console.error('Live error:', msg.message)
-            break
-
-          case 'pong': break
+          case 'ping': break
         }
-      } catch (err) {
-        console.warn('WS parse error:', err)
-      }
+      } catch {}
     }
-  }, [sessionId, onStatus, onTranscript, onToken, onAddMessage])
+  }, [sessionId, onStatus, onToken, onAddMessage])
 
   // ── Disconnect ───────────────────────────────────────
   const disconnect = useCallback(() => {
-    clearTimeout(reconnT.current)
-    retries.current = 3 // prevent reconnect
-    send({ type: 'stop' })
-    ws.current?.close(1000)
+    esRef.current?.close()
     audioProc.current?.stop()
     visionProc.current?.stop()
     player.current.stop()
     setConnected(false); setListening(false); setSpeaking(false)
     setVisionMode(null); setVideoStream(null)
-  }, [send])
+  }, [])
 
-  // ── Mic (VAD-based: always listening) ────────────────
-const startMic = useCallback(async () => {
-  if (!connected || listening) return
-  if (speaking) { 
-    send({ type: 'interrupt' }) // ← interrupt signal
-    player.current.stop() 
-  }
-  try {
-    const proc = new AudioProcessor(
-      (arrayBuffer) => {  // ← binary buffer receive
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          ws.current.send(arrayBuffer)  // ← direct binary send
+  // ── Send text to backend ─────────────────────────────
+  const sendToBackend = useCallback(async (text) => {
+    if (!connected || !text.trim()) return
+    if (speaking) { player.current.stop(); setSpeaking(false) }
+    onAddMessage({ role: 'user', content: text, fromLive: true })
+    onTranscript(text)
+    try {
+      await fetch(`${API_URL}/api/live/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, text, lang: 'en' })
+      })
+    } catch (e) { console.error('Send error:', e) }
+  }, [connected, speaking, sessionId, onTranscript, onAddMessage])
+
+  // ── Mic (VAD) ────────────────────────────────────────
+  const startMic = useCallback(async () => {
+    if (!connected || listening) return
+    try {
+      const proc = new AudioProcessor(
+        (b64) => {/* chunks accumulate in AudioProcessor */},
+        async () => {
+          // VAD silence → transcribe via Groq
+          if (audioProc.current) {
+            setListening(false)
+            // Use Web Speech API for transcription (free, works everywhere)
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+            if (SR) {
+              const rec = new SR()
+              rec.lang = 'bn-BD'  // or 'en-US'
+              rec.onresult = (e) => {
+                const text = e.results[0][0].transcript
+                if (text) sendToBackend(text)
+              }
+              rec.start()
+            }
+          }
         }
-      },
-      () => send({ type: 'audio_end' })
-    )
-    await proc.start()
-    audioProc.current = proc
-    setListening(true)
-  } catch (err) {
-    onStatus(`Mic denied: ${err.message}`)
-  }
-}, [connected, listening, speaking, send, onStatus])
+      )
+      await proc.start()
+      audioProc.current = proc
+      setListening(true)
+    } catch (err) { onStatus(`Mic: ${err.message}`) }
+  }, [connected, listening, sendToBackend, onStatus])
 
   const stopMic = useCallback(() => {
     audioProc.current?.stop()
@@ -382,60 +327,37 @@ const startMic = useCallback(async () => {
     setListening(false)
   }, [])
 
-  // ── Send typed text ──────────────────────────────────
-  const sendText = useCallback((text) => {
-    if (!connected || !text.trim()) return
-    if (speaking) { send({ type: 'interrupt' }); player.current.stop() }
-    send({ type: 'text', text })
-  }, [connected, speaking, send])
+  const sendText = useCallback((text) => sendToBackend(text), [sendToBackend])
 
-  // ── Camera ───────────────────────────────────────────
+  // ── Camera / Screen (unchanged) ──────────────────────
   const startCamera = useCallback(async () => {
     visionProc.current?.stop()
     try {
-      const proc = new VisionProcessor((url) => send({ type: 'frame', data: url }))
+      const proc = new VisionProcessor((url) => {/* frame — future use */})
       await proc.startCamera()
       visionProc.current = proc
       setVisionMode('camera')
       setVideoStream(proc.getStream())
     } catch (err) { onStatus(`Camera: ${err.message}`) }
-  }, [send, onStatus])
+  }, [onStatus])
 
-  // ── Screen ───────────────────────────────────────────
   const startScreen = useCallback(async () => {
     visionProc.current?.stop()
     try {
-      const proc = new VisionProcessor((url) => send({ type: 'frame', data: url }))
+      const proc = new VisionProcessor((url) => {})
       await proc.startScreen()
       visionProc.current = proc
       setVisionMode('screen')
-      proc.getStream()?.getVideoTracks()[0]?.addEventListener('ended', () => {
-        setVisionMode(null)
-        send({ type: 'frame_clear' })
-      })
     } catch (err) { onStatus(`Screen: ${err.message}`) }
-  }, [send, onStatus])
+  }, [onStatus])
 
   const stopVision = useCallback(() => {
     visionProc.current?.stop()
     visionProc.current = null
-    send({ type: 'frame_clear' })
-    setVisionMode(null)
-    setVideoStream(null)
-  }, [send])
-
-  // ── Keepalive ping ───────────────────────────────────
-  useEffect(() => {
-    if (!connected) return
-    const t = setInterval(() => send({ type: 'ping' }), 25000)
-    return () => clearInterval(t)
-  }, [connected, send])
-
-  // ── Cleanup on unmount ───────────────────────────────
-  useEffect(() => () => {
-    clearTimeout(reconnT.current)
-    disconnect()
+    setVisionMode(null); setVideoStream(null)
   }, [])
+
+  useEffect(() => () => disconnect(), [])
 
   return {
     connected, listening, speaking, visionMode, videoStream,
@@ -444,7 +366,6 @@ const startMic = useCallback(async () => {
     toggleAudio: (v) => player.current.setEnabled(v),
   }
 }
-
 // ══════════════════════════════════════════════════════
 //  LIVE MODAL — Gemini Live Full Screen UI
 // ══════════════════════════════════════════════════════
