@@ -59,7 +59,7 @@ async start() {
   }
   this.mediaRec.start(250) // ← 250ms chunks
 
-  const freqData = new nt8Array(this.analyser.frequencyBinCount)
+  const freqData = new Uint8Array(this.analyser.frequencyBinCount)
   this.vadTimer  = setInterval(() => {
     if (!this.active) return
     this.analyser.getByteFrequencyData(freqData)
@@ -157,7 +157,7 @@ class StreamingPlayer {
     this._init()
     try {
       const bin  = atob(b64)
-      const buf  = new nt8Array(bin.length)
+      const buf  = new Uint8Array(bin.length)
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
       const ab   = buf.buffer.slice(0)         // clone before passing
       const abuf = await this.ctx.decodeAudioData(ab)
@@ -230,14 +230,20 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Connect via SSE ──────────────────────────────────
   const connect = useCallback(() => {
-    if (esRef.current) esRef.current.close()
+  if (esRef.current) esRef.current.close()
 
-    const url = `${API_URL}/api/live/stream/${sessionId}`
-    const es  = new EventSource(url)
-    esRef.current = es
+  const url = `${API_URL}/api/live/stream/${sessionId}`
+  const es  = new EventSource(url)
+  esRef.current = es
 
-    es.onopen = () => { setConnected(true); onStatus('ready') }
-    es.onerror = () => { setConnected(false); onStatus('error') }
+  // Optimistic — show connected immediately
+  setConnected(true)
+  onStatus('ready')
+
+  es.onerror = () => {
+    setConnected(false)
+    onStatus('error')
+  }
 
     es.onmessage = (e) => {
       try {
@@ -305,8 +311,8 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
   rec.interimResults = true
   rec.maxAlternatives = 1
 
-  // Auto-detect language — Bangla or English
-  rec.lang = 'bn-BD'  // try Bangla first; change to 'en-US' if needed
+  // Auto language — Bangla + English দুটোই শুনবে
+  rec.lang = navigator.language?.startsWith('bn') ? 'bn-BD' : 'en-US'  // try Bangla first; change to 'en-US' if needed
 
   let finalSent = false
   setListening(true)
@@ -374,7 +380,14 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       setVisionMode('screen')
     } catch (err) { onStatus(`Screen: ${err.message}`) }
   }, [onStatus])
-
+  
+  const stopMic = useCallback(() => {
+  audioProc.current?.stop()
+  audioProc.current = null
+  setListening(false)
+}, [])
+  const sendText = useCallback((text) => sendToBackend(text), [sendToBackend])
+  
   const stopVision = useCallback(() => {
     visionProc.current?.stop()
     visionProc.current = null
@@ -562,15 +575,18 @@ const statusLabel = isConnected ? {
       {/* ── Bottom controls ── */}
       <div className="flex-shrink-0 pb-12 px-8">
         {!isConnected ? (
-          <div className="flex justify-center">
-            <motion.button onClick={live.connect}
-              whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
-              className="px-10 py-3.5 rounded-full text-[15px] font-semibold text-white"
-              style={{ background:'linear-gradient(135deg,#e11d48,#be123c)', boxShadow:'0 0 24px rgba(225,29,72,0.4)' }}>
-              Connect
-            </motion.button>
-          </div>
-        ) : (
+        <div className="flex flex-col items-center gap-3">
+          <motion.button onClick={live.connect}
+            whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
+            className="px-10 py-3.5 rounded-full text-[15px] font-semibold text-white"
+            style={{ background:'linear-gradient(135deg,#e11d48,#be123c)', boxShadow:'0 0 24px rgba(225,29,72,0.4)' }}>
+            Connect
+          </motion.button>
+          <p className="text-[11px]" style={{ color:'rgba(255,255,255,0.3)' }}>
+            Tap to start live session
+          </p>
+        </div>
+      ) : (
           <div className="flex items-center justify-center gap-4">
 
             {/* Camera */}
