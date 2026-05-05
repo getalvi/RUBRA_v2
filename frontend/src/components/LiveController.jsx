@@ -59,7 +59,7 @@ async start() {
   }
   this.mediaRec.start(250) // ← 250ms chunks
 
-  const freqData = new Uint8Array(this.analyser.frequencyBinCount)
+  const freqData = new nt8Array(this.analyser.frequencyBinCount)
   this.vadTimer  = setInterval(() => {
     if (!this.active) return
     this.analyser.getByteFrequencyData(freqData)
@@ -157,7 +157,7 @@ class StreamingPlayer {
     this._init()
     try {
       const bin  = atob(b64)
-      const buf  = new Uint8Array(bin.length)
+      const buf  = new nt8Array(bin.length)
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
       const ab   = buf.buffer.slice(0)         // clone before passing
       const abuf = await this.ctx.decodeAudioData(ab)
@@ -416,9 +416,12 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
 
   const isConnected = live.connected
 
-  const statusLabel = isConnected
-    ? { ready: 'Listening...', thinking: 'Thinking...', error: 'Error' }[status] || status
-    : 'Tap Connect to start'
+const statusLabel = isConnected ? {
+  ready:     '🎤 Tap mic to speak',
+  listening: '👂 Listening...',
+  thinking:  '⚡ Thinking...',
+  error:     '❌ Error',
+}[status] || status : 'Tap Connect to start'
 
   return (
     <motion.div
