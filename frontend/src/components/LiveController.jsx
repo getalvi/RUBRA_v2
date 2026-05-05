@@ -30,56 +30,54 @@ class AudioProcessor {
     this.ENERGY_MIN   = 6         // RMS threshold
   }
 
-  async start() {
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        sampleRate: 16000, channelCount: 1,
-        echoCancellation: true, noiseSuppression: true, autoGainControl: true
-      }
-    })
-
-    // VAD setup
-    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
-    const source  = this.audioCtx.createMediaStreamSource(this.stream)
-    this.analyser = this.audioCtx.createAnalyser()
-    this.analyser.fftSize = 512
-    source.connect(this.analyser)
-
-    // Recorder
-    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus' : 'audio/webm'
-    this.mediaRec = new MediaRecorder(this.stream, { mimeType: mime })
-    this.active = true
-
-    this.mediaRec.ondataavailable = async (e) => {
-      if (!this.active || e.data.size < 50) return
-      const buf = await e.data.arrayBuffer()
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
-      this.onChunk(b64)
+async start() {
+  this.stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      sampleRate: 16000, 
+      channelCount: 1,
+      echoCancellation: true, 
+      noiseSuppression: true, 
+      autoGainControl: true
     }
-    this.mediaRec.start(300) // chunk every 300ms
+  })
 
-    // VAD loop
-    const freqData = new Uint8Array(this.analyser.frequencyBinCount)
-    this.vadTimer  = setInterval(() => {
-      if (!this.active) return
-      this.analyser.getByteFrequencyData(freqData)
-      const rms = Math.sqrt(freqData.reduce((s, v) => s + v * v, 0) / freqData.length)
+  this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
+  const source  = this.audioCtx.createMediaStreamSource(this.stream)
+  this.analyser = this.audioCtx.createAnalyser()
+  this.analyser.fftSize = 512
+  source.connect(this.analyser)
 
-      if (rms >= this.ENERGY_MIN) {
-        this.silenceMs = 0
-        this.hasSpeech = true   // speech detected
-      } else {
-        this.silenceMs += 100
-        // Only trigger if speech was actually detected
-        if (this.hasSpeech && this.silenceMs >= this.SILENCE_MS) {
-          this.hasSpeech = false
-          this.silenceMs = 0
-          this.onSilence()
-        }
-      }
-    }, 100)
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : 'audio/webm'
+  this.mediaRec = new MediaRecorder(this.stream, { mimeType: mime })
+  this.active = true
+
+  this.mediaRec.ondataavailable = async (e) => {
+    if (!this.active || e.data.size < 50) return
+    const buf = await e.data.arrayBuffer()
+    this.onChunk(buf)  // ← binary buffer পাঠাও, base64 না
   }
+  this.mediaRec.start(250) // ← 250ms chunks
+
+  const freqData = new Uint8Array(this.analyser.frequencyBinCount)
+  this.vadTimer  = setInterval(() => {
+    if (!this.active) return
+    this.analyser.getByteFrequencyData(freqData)
+    const rms = Math.sqrt(freqData.reduce((s, v) => s + v * v, 0) / freqData.length)
+
+    if (rms >= this.ENERGY_MIN) {
+      this.silenceMs = 0
+      this.hasSpeech = true
+    } else {
+      this.silenceMs += 100
+      if (this.hasSpeech && this.silenceMs >= this.SILENCE_MS) {
+        this.hasSpeech = false
+        this.silenceMs = 0
+        this.onSilence()
+      }
+    }
+  }, 100)
+}
 
   stop() {
     this.active = false
@@ -105,7 +103,7 @@ class VisionProcessor {
     this.video.playsInline = true
   }
   async startCamera() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+    this.stream = await navigator.mediaDevices.getUserMedia({ video:  width: 640, height: 480, facingMode: { ideal: "environment" } })
     this._capture()
   }
   async startScreen() {
@@ -335,23 +333,28 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
   }, [send])
 
   // ── Mic (VAD-based: always listening) ────────────────
-  const startMic = useCallback(async () => {
-    if (!connected || listening) return
-    if (speaking) { send({ type: 'interrupt' }); player.current.stop() }
-    try {
-      const proc = new AudioProcessor(
-        // audio chunk → backend
-        (b64) => send({ type: 'audio_chunk', data: b64 }),
-        // VAD silence → trigger transcription
-        () => send({ type: 'audio_end' })
-      )
-      await proc.start()
-      audioProc.current = proc
-      setListening(true)
-    } catch (err) {
-      onStatus(`Mic denied: ${err.message}`)
-    }
-  }, [connected, listening, speaking, send, onStatus])
+const startMic = useCallback(async () => {
+  if (!connected || listening) return
+  if (speaking) { 
+    send({ type: 'interrupt' }) // ← interrupt signal
+    player.current.stop() 
+  }
+  try {
+    const proc = new AudioProcessor(
+      (arrayBuffer) => {  // ← binary buffer receive
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(arrayBuffer)  // ← direct binary send
+        }
+      },
+      () => send({ type: 'audio_end' })
+    )
+    await proc.start()
+    audioProc.current = proc
+    setListening(true)
+  } catch (err) {
+    onStatus(`Mic denied: ${err.message}`)
+  }
+}, [connected, listening, speaking, send, onStatus])
 
   const stopMic = useCallback(() => {
     audioProc.current?.stop()
