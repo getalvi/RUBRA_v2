@@ -293,41 +293,65 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Mic (VAD) ────────────────────────────────────────
   const startMic = useCallback(async () => {
-    if (!connected || listening) return
-    try {
-      const proc = new AudioProcessor(
-        (b64) => {/* chunks accumulate in AudioProcessor */},
-        async () => {
-          // VAD silence → transcribe via Groq
-          if (audioProc.current) {
-            setListening(false)
-            // Use Web Speech API for transcription (free, works everywhere)
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-            if (SR) {
-              const rec = new SR()
-              rec.lang = 'bn-BD'  // or 'en-US'
-              rec.onresult = (e) => {
-                const text = e.results[0][0].transcript
-                if (text) sendToBackend(text)
-              }
-              rec.start()
-            }
-          }
-        }
-      )
-      await proc.start()
-      audioProc.current = proc
-      setListening(true)
-    } catch (err) { onStatus(`Mic: ${err.message}`) }
-  }, [connected, listening, sendToBackend, onStatus])
+  if (!connected || listening) return
+  player.current.stop()
+  setSpeaking(false)
 
-  const stopMic = useCallback(() => {
-    audioProc.current?.stop()
-    audioProc.current = null
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SR) { onStatus('Speech API not supported'); return }
+
+  const rec = new SR()
+  rec.continuous = false
+  rec.interimResults = true
+  rec.maxAlternatives = 1
+
+  // Auto-detect language — Bangla or English
+  rec.lang = 'bn-BD'  // try Bangla first; change to 'en-US' if needed
+
+  let finalSent = false
+  setListening(true)
+  onStatus('listening')
+
+  rec.onresult = async (e) => {
+    const result = e.results[e.results.length - 1]
+    const text   = result[0].transcript.trim()
+
+    if (result.isFinal && text && !finalSent) {
+      finalSent = true
+      setListening(false)
+      onTranscript(text)
+      onAddMessage({ role: 'user', content: text, fromLive: true })
+      onStatus('thinking')
+
+      try {
+        await fetch(`${API_URL}/api/live/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            text,
+            lang: 'auto'
+          })
+        })
+      } catch (e) { console.error('Send error:', e) }
+    }
+  }
+
+  rec.onerror = (e) => {
     setListening(false)
-  }, [])
+    if (e.error === 'no-speech') onStatus('ready')
+    else onStatus(`Mic error: ${e.error}`)
+  }
 
-  const sendText = useCallback((text) => sendToBackend(text), [sendToBackend])
+  rec.onend = () => {
+    setListening(false)
+    if (!finalSent) onStatus('ready')
+  }
+
+  try { rec.start() }
+  catch (e) { setListening(false); onStatus(`Mic: ${e.message}`) }
+
+}, [connected, listening, speaking, sessionId, onTranscript, onAddMessage, onStatus])
 
   // ── Camera / Screen (unchanged) ──────────────────────
   const startCamera = useCallback(async () => {
