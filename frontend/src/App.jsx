@@ -185,7 +185,7 @@ export default function App() {
           <LiveModal
             sessionId={chat.sessionId || 'live'}
             onClose={() => setLiveOpen(false)}
-            onMessage={(msg) => chat.addMessage?.(msg)}
+            onAddMessage={(msg) => chat.addMessage?.(msg)}
           />
         )}
       </AnimatePresence>
