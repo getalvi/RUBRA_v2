@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, X, Volume2, VolumeX } from 'lucide-react'
 
 // ── WebSocket URL builder ───────────────────────────────
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7860'
+const API_URL = import.meta.env.VITE_API_URL || 'https://getalvi-rubrav2.hf.space'
 const WS_BASE = API_URL.startsWith('https')
   ? API_URL.replace('https://', 'wss://')
   : API_URL.replace('http://', 'ws://')
@@ -237,7 +237,6 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Connect ─────────────────────────────────────────
   const connect = useCallback(() => {
-    alert('Connecting to: ' + WS_BASE)
     if (ws.current?.readyState === WebSocket.OPEN) return
     const url  = `${WS_BASE}/ws/live/${sessionId}`
     const sock = new WebSocket(url)
