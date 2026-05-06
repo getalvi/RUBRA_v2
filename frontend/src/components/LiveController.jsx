@@ -1,90 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, X, Volume2, VolumeX } from 'lucide-react'
 
-// ── WebSocket URL builder ───────────────────────────────
 const API_URL = import.meta.env.VITE_API_URL || 'https://getalvi-rubrav2.hf.space'
-const WS_BASE = API_URL.startsWith('https')
-  ? API_URL.replace('https://', 'wss://')
-  : API_URL.replace('http://', 'ws://')
-
-// ══════════════════════════════════════════════════════
-//  AUDIO PROCESSOR with VAD
-//  Gemini pattern: mic always on, silence triggers send
-// ══════════════════════════════════════════════════════
-class AudioProcessor {
-  constructor(onChunk, onSilence) {
-    this.onChunk   = onChunk
-    this.onSilence = onSilence
-    this.mediaRec  = null
-    this.stream    = null
-    this.active    = false
-    this.audioCtx  = null
-    this.analyser  = null
-    this.vadTimer  = null
-    this.silenceMs = 0
-    this.hasSpeech = false        // track if any speech happened
-    this.SILENCE_MS   = 1500      // 1.5s silence → send
-    this.ENERGY_MIN   = 6         // RMS threshold
-  }
-
-async start() {
-  this.stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      sampleRate: 16000, 
-      channelCount: 1,
-      echoCancellation: true, 
-      noiseSuppression: true, 
-      autoGainControl: true
-    }
-  })
-
-  this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
-  const source  = this.audioCtx.createMediaStreamSource(this.stream)
-  this.analyser = this.audioCtx.createAnalyser()
-  this.analyser.fftSize = 512
-  source.connect(this.analyser)
-
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus' : 'audio/webm'
-  this.mediaRec = new MediaRecorder(this.stream, { mimeType: mime })
-  this.active = true
-
-  this.mediaRec.ondataavailable = async (e) => {
-    if (!this.active || e.data.size < 50) return
-    const buf = await e.data.arrayBuffer()
-    this.onChunk(buf)  // ← binary buffer পাঠাও, base64 না
-  }
-  this.mediaRec.start(250) // ← 250ms chunks
-
-  const freqData = new Uint8Array(this.analyser.frequencyBinCount)
-  this.vadTimer  = setInterval(() => {
-    if (!this.active) return
-    this.analyser.getByteFrequencyData(freqData)
-    const rms = Math.sqrt(freqData.reduce((s, v) => s + v * v, 0) / freqData.length)
-
-    if (rms >= this.ENERGY_MIN) {
-      this.silenceMs = 0
-      this.hasSpeech = true
-    } else {
-      this.silenceMs += 100
-      if (this.hasSpeech && this.silenceMs >= this.SILENCE_MS) {
-        this.hasSpeech = false
-        this.silenceMs = 0
-        this.onSilence()
-      }
-    }
-  }, 100)
-}
-
-  stop() {
-    this.active = false
-    clearInterval(this.vadTimer)
-    if (this.mediaRec?.state === 'recording') this.mediaRec.stop()
-    this.stream?.getTracks().forEach(t => t.stop())
-    try { this.audioCtx?.close() } catch {}
-  }
-}
 
 // ══════════════════════════════════════════════════════
 //  VISION PROCESSOR
@@ -101,15 +19,11 @@ class VisionProcessor {
     this.video.playsInline = true
   }
   async startCamera() {
-  this.stream = await navigator.mediaDevices.getUserMedia({ 
-    video: { 
-      width: 640, 
-      height: 480, 
-      facingMode: { ideal: "environment" } 
-    } 
-  })
-  this._capture()
-}
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: { ideal: 'environment' } }
+    })
+    this._capture()
+  }
   async startScreen() {
     this.stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
     this._capture()
@@ -144,12 +58,10 @@ class StreamingPlayer {
     this.playing = false
     this.enabled = true
   }
-
   _init() {
     if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)()
     if (this.ctx.state === 'suspended') this.ctx.resume()
   }
-
   async play(b64) {
     if (!this.enabled || !b64) return
     this._init()
@@ -157,15 +69,12 @@ class StreamingPlayer {
       const bin  = atob(b64)
       const buf  = new Uint8Array(bin.length)
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
-      const ab   = buf.buffer.slice(0)         // clone before passing
+      const ab   = buf.buffer.slice(0)
       const abuf = await this.ctx.decodeAudioData(ab)
       this.queue.push(abuf)
       if (!this.playing) this._next()
-    } catch (e) {
-      console.warn('TTS audio decode:', e.message)
-    }
+    } catch (e) { console.warn('TTS decode:', e.message) }
   }
-
   _next() {
     if (!this.queue.length || !this.enabled) { this.playing = false; return }
     this.playing = true
@@ -175,38 +84,28 @@ class StreamingPlayer {
     src.start(0)
     src.onended = () => this._next()
   }
-
-  // Fallback: Web Speech API
   speakFallback(text) {
     if (!this.enabled || !text) return
     const synth = window.speechSynthesis
     synth.cancel()
-    const utt   = new SpeechSynthesisUtterance(text)
-    const waitV = (cb) => {
-      const v = synth.getVoices()
-      if (v.length) cb(v)
-      else synth.onvoiceschanged = () => cb(synth.getVoices())
-    }
-    waitV((voices) => {
+    const utt = new SpeechSynthesisUtterance(text)
+    const go = (voices) => {
       const want = ['Microsoft Aria Online', 'Microsoft Jenny Online',
                     'Google UK English Female', 'Samantha', 'Karen', 'Aria', 'Jenny']
-      let voice = null
-      for (const n of want) {
-        voice = voices.find(v => v.name.includes(n))
-        if (voice) break
-      }
-      if (voice) utt.voice = voice
+      let v = null
+      for (const n of want) { v = voices.find(x => x.name.includes(n)); if (v) break }
+      if (v) utt.voice = v
       utt.pitch = 1.15; utt.rate = 0.92; utt.volume = 1
       synth.speak(utt)
-    })
+    }
+    const vs = synth.getVoices()
+    if (vs.length) go(vs)
+    else synth.onvoiceschanged = () => go(synth.getVoices())
   }
-
   stop() {
-    this.queue   = []
-    this.playing = false
+    this.queue = []; this.playing = false
     window.speechSynthesis?.cancel()
   }
-
   setEnabled(v) { this.enabled = v; if (!v) this.stop() }
 }
 
@@ -215,10 +114,11 @@ class StreamingPlayer {
 // ══════════════════════════════════════════════════════
 function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage }) {
   const esRef      = useRef(null)
-  const audioProc  = useRef(null)
+  const recRef     = useRef(null)
   const visionProc = useRef(null)
   const player     = useRef(new StreamingPlayer())
   const fullResp   = useRef('')
+  const isActive   = useRef(false)
 
   const [connected,   setConnected]   = useState(false)
   const [listening,   setListening]   = useState(false)
@@ -228,34 +128,28 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Connect via SSE ──────────────────────────────────
   const connect = useCallback(() => {
-  if (esRef.current) esRef.current.close()
+    if (esRef.current) esRef.current.close()
+    const url = `${API_URL}/api/live/stream/${sessionId}`
+    const es  = new EventSource(url)
+    esRef.current = es
+    setConnected(true)
+    onStatus('ready')
 
-  const url = `${API_URL}/api/live/stream/${sessionId}`
-  const es  = new EventSource(url)
-  esRef.current = es
-
-  // Optimistic — show connected immediately
-  setConnected(true)
-  onStatus('ready')
-
-  es.onerror = () => {
-    setConnected(false)
-    onStatus('error')
-  }
+    es.onerror = () => { setConnected(false); onStatus('error') }
 
     es.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
         switch (msg.type) {
-          case 'ready':       onStatus('ready'); break
-          case 'thinking':    onStatus('thinking'); fullResp.current = ''; break
+          case 'ready':    onStatus('ready'); break
+          case 'thinking': onStatus('thinking'); fullResp.current = ''; break
           case 'token':
             fullResp.current += msg.content
             onToken(msg.content)
             setSpeaking(true)
             break
-          case 'tts_chunk':   player.current.play(msg.audio_b64); break
-          case 'tts_text':    player.current.speakFallback(msg.text); break
+          case 'tts_chunk': player.current.play(msg.audio_b64); break
+          case 'tts_text':  player.current.speakFallback(msg.text); break
           case 'done':
             setSpeaking(false)
             onStatus('ready')
@@ -272,120 +166,158 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
 
   // ── Disconnect ───────────────────────────────────────
   const disconnect = useCallback(() => {
+    isActive.current = false
     esRef.current?.close()
-    audioProc.current?.stop()
+    try { recRef.current?.stop() } catch {}
+    recRef.current = null
     visionProc.current?.stop()
     player.current.stop()
     setConnected(false); setListening(false); setSpeaking(false)
     setVisionMode(null); setVideoStream(null)
   }, [])
 
-  // ── Send text to backend ─────────────────────────────
-  const sendToBackend = useCallback(async (text) => {
+  // ── Mic — continuous, auto-restart ──────────────────
+  const startMic = useCallback(() => {
+    if (!connected || listening) return
+    player.current.stop()
+    setSpeaking(false)
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) { onStatus('Speech API not supported'); return }
+
+    isActive.current = true
+    setListening(true)
+    onStatus('listening')
+
+    const startRec = () => {
+      if (!isActive.current) return
+      const rec = new SR()
+      rec.continuous     = true
+      rec.interimResults = true
+      rec.maxAlternatives = 1
+      rec.lang = navigator.language?.startsWith('bn') ? 'bn-BD' : 'bn-BD'
+      recRef.current = rec
+
+      let lastText  = ''
+      let sendTimer = null
+
+      rec.onresult = async (e) => {
+        const result = e.results[e.results.length - 1]
+        const text   = result[0].transcript.trim()
+        if (!text) return
+
+        if (result.isFinal && text !== lastText) {
+          lastText = text
+          clearTimeout(sendTimer)
+
+          onTranscript(text)
+          onAddMessage({ role: 'user', content: text, fromLive: true })
+          onStatus('thinking')
+
+          try {
+            await fetch(`${API_URL}/api/live/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sessionId, text, lang: 'auto' })
+            })
+          } catch {}
+
+          // ৩ সেকেন্ড পর আবার listening status
+          sendTimer = setTimeout(() => {
+            if (isActive.current) onStatus('listening')
+          }, 3000)
+        }
+      }
+
+      rec.onerror = (e) => {
+        if (e.error === 'no-speech' || e.error === 'aborted') {
+          if (isActive.current) setTimeout(startRec, 300)
+        } else {
+          isActive.current = false
+          setListening(false)
+          onStatus('ready')
+        }
+      }
+
+      rec.onend = () => {
+        // Auto-restart যদি mic এখনো active
+        if (isActive.current) setTimeout(startRec, 300)
+        else { setListening(false); onStatus('ready') }
+      }
+
+      try { rec.start() } catch {}
+    }
+
+    startRec()
+  }, [connected, listening, sessionId, onTranscript, onAddMessage, onStatus])
+
+  // ── Stop Mic ─────────────────────────────────────────
+  const stopMic = useCallback(() => {
+    isActive.current = false
+    try { recRef.current?.stop() } catch {}
+    recRef.current = null
+    setListening(false)
+    onStatus('ready')
+  }, [onStatus])
+
+  // ── Send typed text ──────────────────────────────────
+  const sendText = useCallback(async (text) => {
     if (!connected || !text.trim()) return
-    if (speaking) { player.current.stop(); setSpeaking(false) }
+    player.current.stop(); setSpeaking(false)
     onAddMessage({ role: 'user', content: text, fromLive: true })
     onTranscript(text)
     try {
       await fetch(`${API_URL}/api/live/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, text, lang: 'en' })
+        body: JSON.stringify({ session_id: sessionId, text, lang: 'auto' })
       })
-    } catch (e) { console.error('Send error:', e) }
-  }, [connected, speaking, sessionId, onTranscript, onAddMessage])
+    } catch {}
+  }, [connected, sessionId, onTranscript, onAddMessage])
 
-  // ── Mic (VAD) ────────────────────────────────────────
-  const startMic = useCallback(async () => {
-  if (!connected || listening) return
-  player.current.stop()
-  setSpeaking(false)
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SR) { onStatus('Speech API not supported'); return }
-
-  const rec = new SR()
-  rec.continuous = false
-  rec.interimResults = true
-  rec.maxAlternatives = 1
-
-  // Auto language — Bangla + English দুটোই শুনবে
-  rec.lang = navigator.language?.startsWith('bn') ? 'bn-BD' : 'en-US'  // try Bangla first; change to 'en-US' if needed
-
-  let finalSent = false
-  setListening(true)
-  onStatus('listening')
-
-  rec.onresult = async (e) => {
-    const result = e.results[e.results.length - 1]
-    const text   = result[0].transcript.trim()
-
-    if (result.isFinal && text && !finalSent) {
-      finalSent = true
-      setListening(false)
-      onTranscript(text)
-      onAddMessage({ role: 'user', content: text, fromLive: true })
-      onStatus('thinking')
-
-      try {
-        await fetch(`${API_URL}/api/live/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            text,
-            lang: 'auto'
-          })
-        })
-      } catch (e) { console.error('Send error:', e) }
-    }
-  }
-
-  rec.onerror = (e) => {
-    setListening(false)
-    if (e.error === 'no-speech') onStatus('ready')
-    else onStatus(`Mic error: ${e.error}`)
-  }
-
-  rec.onend = () => {
-    setListening(false)
-    if (!finalSent) onStatus('ready')
-  }
-
-  try { rec.start() }
-  catch (e) { setListening(false); onStatus(`Mic: ${e.message}`) }
-
-}, [connected, listening, speaking, sessionId, onTranscript, onAddMessage, onStatus])
-
-  // ── Camera / Screen (unchanged) ──────────────────────
+  // ── Camera ───────────────────────────────────────────
   const startCamera = useCallback(async () => {
     visionProc.current?.stop()
     try {
-      const proc = new VisionProcessor((url) => {/* frame — future use */})
+      const proc = new VisionProcessor(async (dataUrl) => {
+        try {
+          await fetch(`${API_URL}/api/live/frame`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, frame: dataUrl })
+          })
+        } catch {}
+      })
       await proc.startCamera()
       visionProc.current = proc
       setVisionMode('camera')
       setVideoStream(proc.getStream())
     } catch (err) { onStatus(`Camera: ${err.message}`) }
-  }, [onStatus])
+  }, [sessionId, onStatus])
 
+  // ── Screen ───────────────────────────────────────────
   const startScreen = useCallback(async () => {
     visionProc.current?.stop()
     try {
-      const proc = new VisionProcessor((url) => {})
+      const proc = new VisionProcessor(async (dataUrl) => {
+        try {
+          await fetch(`${API_URL}/api/live/frame`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, frame: dataUrl })
+          })
+        } catch {}
+      })
       await proc.startScreen()
       visionProc.current = proc
       setVisionMode('screen')
+      proc.getStream()?.getVideoTracks()[0]?.addEventListener('ended', () => {
+        setVisionMode(null)
+        visionProc.current = null
+      })
     } catch (err) { onStatus(`Screen: ${err.message}`) }
-  }, [onStatus])
-  
-  const stopMic = useCallback(() => {
-  audioProc.current?.stop()
-  audioProc.current = null
-  setListening(false)
-}, [])
-  const sendText = useCallback((text) => sendToBackend(text), [sendToBackend])
-  
+  }, [sessionId, onStatus])
+
   const stopVision = useCallback(() => {
     visionProc.current?.stop()
     visionProc.current = null
@@ -401,8 +333,9 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     toggleAudio: (v) => player.current.setEnabled(v),
   }
 }
+
 // ══════════════════════════════════════════════════════
-//  LIVE MODAL — Gemini Live Full Screen UI
+//  LIVE MODAL
 // ══════════════════════════════════════════════════════
 export default function LiveModal({ sessionId, onClose, onAddMessage }) {
   const [status,     setStatus]     = useState('disconnected')
@@ -412,13 +345,12 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
   const videoRef = useRef(null)
 
   const live = useRubraLive(sessionId, {
-    onTranscript:  (t) => { setTranscript(t); setLiveTokens('') },
-    onToken:       (t) => setLiveTokens(prev => prev + t),
-    onStatus:      (s) => setStatus(s),
-    onAddMessage,  // pass through to parent (adds to chat)
+    onTranscript: (t) => { setTranscript(t); setLiveTokens('') },
+    onToken:      (t) => setLiveTokens(prev => prev + t),
+    onStatus:     (s) => setStatus(s),
+    onAddMessage,
   })
 
-  // Attach camera preview
   useEffect(() => {
     if (videoRef.current && live.videoStream) {
       videoRef.current.srcObject = live.videoStream
@@ -426,13 +358,12 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
   }, [live.videoStream])
 
   const isConnected = live.connected
-
-const statusLabel = isConnected ? {
-  ready:     '🎤 Tap mic to speak',
-  listening: '👂 Listening...',
-  thinking:  '⚡ Thinking...',
-  error:     '❌ Error',
-}[status] || status : 'Tap Connect to start'
+  const statusLabel = isConnected ? ({
+    ready:     '🎤 Tap mic to speak',
+    listening: '👂 Listening...',
+    thinking:  '⚡ Thinking...',
+    error:     '❌ Error',
+  }[status] || status) : 'Tap Connect to start'
 
   return (
     <motion.div
@@ -442,18 +373,14 @@ const statusLabel = isConnected ? {
       className="fixed inset-0 z-50 flex flex-col select-none"
       style={{ background: '#000' }}
     >
-      {/* ── Top bar ── */}
+      {/* Top bar */}
       <div className="flex items-center justify-between px-5 pt-10 pb-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <svg width="18" height="18" viewBox="0 0 24 24">
-            <rect x="2"  y="16" width="4" height="6" rx="1"
-              fill={isConnected ? '#fff' : '#444'}/>
-            <rect x="8"  y="11" width="4" height="11" rx="1"
-              fill={isConnected ? '#fff' : '#444'}/>
-            <rect x="14" y="6"  width="4" height="16" rx="1"
-              fill={live.listening ? '#fb7185' : isConnected ? '#fff' : '#444'}/>
-            <rect x="20" y="2"  width="4" height="20" rx="1"
-              fill={live.speaking ? '#818cf8' : isConnected ? '#888' : '#333'}/>
+            <rect x="2"  y="16" width="4" height="6"  rx="1" fill={isConnected ? '#fff' : '#444'}/>
+            <rect x="8"  y="11" width="4" height="11" rx="1" fill={isConnected ? '#fff' : '#444'}/>
+            <rect x="14" y="6"  width="4" height="16" rx="1" fill={live.listening ? '#fb7185' : isConnected ? '#fff' : '#444'}/>
+            <rect x="20" y="2"  width="4" height="20" rx="1" fill={live.speaking ? '#818cf8' : isConnected ? '#888' : '#333'}/>
           </svg>
           <span className="text-white text-[16px] font-medium">Live</span>
           {isConnected && (
@@ -470,7 +397,7 @@ const statusLabel = isConnected ? {
         </button>
       </div>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 relative overflow-hidden">
 
         {/* Camera preview */}
@@ -482,7 +409,7 @@ const statusLabel = isConnected ? {
           </motion.div>
         )}
 
-        {/* Screen share badge */}
+        {/* Screen badge */}
         {live.visionMode === 'screen' && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
             className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full"
@@ -492,9 +419,8 @@ const statusLabel = isConnected ? {
           </motion.div>
         )}
 
-        {/* ── Orb ── */}
+        {/* Orb */}
         <div className="relative flex items-center justify-center mb-12">
-          {/* Glow rings */}
           {[90, 115, 140].map((size, i) => (
             <motion.div key={i} className="absolute rounded-full"
               style={{
@@ -506,17 +432,14 @@ const statusLabel = isConnected ? {
                   : `radial-gradient(circle, rgba(255,255,255,${0.04 - i*0.01}) 0%, transparent 70%)`,
               }}
               animate={
-                live.speaking ? { scale:[1, 1.18+i*0.05, 1], opacity:[0.5,1,0.5] }
-              : live.listening ? { scale:[1, 1.1+i*0.04, 1], opacity:[0.4,0.9,0.4] }
+                live.speaking  ? { scale:[1,1.18+i*0.05,1], opacity:[0.5,1,0.5] }
+              : live.listening ? { scale:[1,1.1+i*0.04,1],  opacity:[0.4,0.9,0.4] }
               : {}
               }
               transition={{ repeat:Infinity, duration:1.8+i*0.3 }}
             />
           ))}
-
-          {/* Core orb */}
-          <motion.div
-            className="relative w-20 h-20 rounded-full flex items-center justify-center"
+          <motion.div className="relative w-20 h-20 rounded-full flex items-center justify-center"
             style={{
               background: live.speaking
                 ? 'radial-gradient(circle at 35% 35%, #818cf8, #4338ca)'
@@ -548,7 +471,7 @@ const statusLabel = isConnected ? {
           {statusLabel}
         </motion.p>
 
-        {/* Transcript + Response — shows in Live Modal AND gets added to chat */}
+        {/* Transcript + Response */}
         <div className="w-full max-w-xs text-center space-y-2 min-h-[60px]">
           {transcript && !liveTokens && (
             <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }}
@@ -570,21 +493,21 @@ const statusLabel = isConnected ? {
         </div>
       </div>
 
-      {/* ── Bottom controls ── */}
+      {/* Bottom controls */}
       <div className="flex-shrink-0 pb-12 px-8">
         {!isConnected ? (
-        <div className="flex flex-col items-center gap-3">
-          <motion.button onClick={live.connect}
-            whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
-            className="px-10 py-3.5 rounded-full text-[15px] font-semibold text-white"
-            style={{ background:'linear-gradient(135deg,#e11d48,#be123c)', boxShadow:'0 0 24px rgba(225,29,72,0.4)' }}>
-            Connect
-          </motion.button>
-          <p className="text-[11px]" style={{ color:'rgba(255,255,255,0.3)' }}>
-            Tap to start live session
-          </p>
-        </div>
-      ) : (
+          <div className="flex flex-col items-center gap-3">
+            <motion.button onClick={live.connect}
+              whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
+              className="px-10 py-3.5 rounded-full text-[15px] font-semibold text-white"
+              style={{ background:'linear-gradient(135deg,#e11d48,#be123c)', boxShadow:'0 0 24px rgba(225,29,72,0.4)' }}>
+              Connect
+            </motion.button>
+            <p className="text-[11px]" style={{ color:'rgba(255,255,255,0.3)' }}>
+              Tap to start live session
+            </p>
+          </div>
+        ) : (
           <div className="flex items-center justify-center gap-4">
 
             {/* Camera */}
@@ -615,7 +538,7 @@ const statusLabel = isConnected ? {
                 : <Monitor   size={22} color="rgba(255,255,255,0.7)"/>}
             </motion.button>
 
-            {/* Mic — CENTER, RED, biggest */}
+            {/* Mic */}
             <motion.button
               onClick={live.listening ? live.stopMic : live.startMic}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
@@ -663,7 +586,7 @@ const statusLabel = isConnected ? {
 }
 
 // ══════════════════════════════════════════════════════
-//  LIVE MODE BUTTON — paste in TopBar
+//  LIVE MODE BUTTON
 // ══════════════════════════════════════════════════════
 export function LiveModeButton({ onClick, active = false }) {
   return (
