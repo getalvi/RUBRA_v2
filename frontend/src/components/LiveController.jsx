@@ -148,9 +148,22 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
             onToken(msg.content)
             setSpeaking(true)
             break
-          case 'tts_chunk': player.current.play(msg.audio_b64); break
-          case 'tts_text':  player.current.speakFallback(msg.text); break
-          case 'done':
+            case 'tts_chunk':
+              isActive.current = false  // TTS চলার সময় mic বন্ধ
+              player.current.play(msg.audio_b64)
+              break
+            case 'tts_text':
+              isActive.current = false
+              player.current.speakFallback(msg.text)
+              break
+            case 'done':
+              setSpeaking(false)
+              // TTS শেষ হলে আবার mic চালু
+              setTimeout(() => {
+                if (recRef.current && listening) {
+                  isActive.current = true
+                }
+              }, 800)            
             setSpeaking(false)
             onStatus('ready')
             if (fullResp.current.trim()) {
