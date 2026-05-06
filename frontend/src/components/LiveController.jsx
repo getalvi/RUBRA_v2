@@ -195,14 +195,17 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       rec.continuous     = true
       rec.interimResults = true
       rec.maxAlternatives = 1
-      rec.lang = navigator.language?.startsWith('bn') ? 'bn-BD' : 'bn-BD'
+      rec.lang = 'bn-BD'
       recRef.current = rec
 
       let lastText  = ''
       let sendTimer = null
-
+      if (speaking) return
+      player.current.stop()
+      
       rec.onresult = async (e) => {
-        const result = e.results[e.results.length - 1]
+      if (!isActive.current) return
+      const result = e.results[e.results.length - 1]
         const text   = result[0].transcript.trim()
         if (!text) return
 
