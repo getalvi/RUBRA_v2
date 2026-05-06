@@ -4,17 +4,14 @@ import { Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, X, Volume2, VolumeX 
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://getalvi-rubrav2.hf.space'
 
-// ══════════════════════════════════════════════════════
-//  VISION PROCESSOR
-// ══════════════════════════════════════════════════════
 class VisionProcessor {
   constructor(onFrame) {
     this.onFrame = onFrame
-    this.stream  = null
-    this.timer   = null
-    this.canvas  = document.createElement('canvas')
-    this.ctx2d   = this.canvas.getContext('2d')
-    this.video   = document.createElement('video')
+    this.stream = null
+    this.timer = null
+    this.canvas = document.createElement('canvas')
+    this.ctx2d = this.canvas.getContext('2d')
+    this.video = document.createElement('video')
     this.video.muted = true
     this.video.playsInline = true
   }
@@ -27,14 +24,13 @@ class VisionProcessor {
   async startScreen() {
     this.stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
     this._capture()
-    this.stream.getVideoTracks()[0].onended = () => this.stop()
   }
   _capture() {
     this.video.srcObject = this.stream
     this.video.play()
     this.timer = setInterval(() => {
       if (!this.video.videoWidth) return
-      this.canvas.width  = 480
+      this.canvas.width = 480
       this.canvas.height = Math.round(480 * this.video.videoHeight / this.video.videoWidth)
       this.ctx2d.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height)
       this.onFrame(this.canvas.toDataURL('image/jpeg', 0.55))
@@ -48,13 +44,10 @@ class VisionProcessor {
   }
 }
 
-// ══════════════════════════════════════════════════════
-//  STREAMING AUDIO PLAYER
-// ══════════════════════════════════════════════════════
 class StreamingPlayer {
   constructor() {
-    this.ctx     = null
-    this.queue   = []
+    this.ctx = null
+    this.queue = []
     this.playing = false
     this.enabled = true
   }
@@ -66,14 +59,13 @@ class StreamingPlayer {
     if (!this.enabled || !b64) return
     this._init()
     try {
-      const bin  = atob(b64)
-      const buf  = new Uint8Array(bin.length)
+      const bin = atob(b64)
+      const buf = new Uint8Array(bin.length)
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
-      const ab   = buf.buffer.slice(0)
-      const abuf = await this.ctx.decodeAudioData(ab)
+      const abuf = await this.ctx.decodeAudioData(buf.buffer.slice(0))
       this.queue.push(abuf)
       if (!this.playing) this._next()
-    } catch (e) { console.warn('TTS decode:', e.message) }
+    } catch (e) { console.warn('TTS:', e.message) }
   }
   _next() {
     if (!this.queue.length || !this.enabled) { this.playing = false; return }
@@ -90,8 +82,7 @@ class StreamingPlayer {
     synth.cancel()
     const utt = new SpeechSynthesisUtterance(text)
     const go = (voices) => {
-      const want = ['Microsoft Aria Online', 'Microsoft Jenny Online',
-                    'Google UK English Female', 'Samantha', 'Karen', 'Aria', 'Jenny']
+      const want = ['Microsoft Aria Online', 'Microsoft Jenny Online', 'Google UK English Female', 'Samantha', 'Karen', 'Aria', 'Jenny']
       let v = null
       for (const n of want) { v = voices.find(x => x.name.includes(n)); if (v) break }
       if (v) utt.voice = v
@@ -109,9 +100,6 @@ class StreamingPlayer {
   setEnabled(v) { this.enabled = v; if (!v) this.stop() }
 }
 
-// ══════════════════════════════════════════════════════
-//  useRubraLive HOOK
-// ══════════════════════════════════════════════════════
 function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage }) {
   const esRef      = useRef(null)
   const recRef     = useRef(null)
@@ -126,11 +114,9 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
   const [visionMode,  setVisionMode]  = useState(null)
   const [videoStream, setVideoStream] = useState(null)
 
-  // ── Connect via SSE ──────────────────────────────────
   const connect = useCallback(() => {
     if (esRef.current) esRef.current.close()
-    const url = `${API_URL}/api/live/stream/${sessionId}`
-    const es  = new EventSource(url)
+    const es = new EventSource(`${API_URL}/api/live/stream/${sessionId}`)
     esRef.current = es
     setConnected(true)
     onStatus('ready')
@@ -148,8 +134,8 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
             onToken(msg.content)
             setSpeaking(true)
             break
-            case 'tts_chunk':
-            isActive.current = false  // TTS চলার সময় mic বন্ধ
+          case 'tts_chunk':
+            isActive.current = false
             player.current.play(msg.audio_b64)
             break
           case 'tts_text':
@@ -163,7 +149,6 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
               onAddMessage({ role: 'assistant', content: fullResp.current, fromLive: true })
               fullResp.current = ''
             }
-            // TTS শেষ — ১ সেকেন্ড পর mic আবার চালু
             setTimeout(() => {
               if (recRef.current !== null) {
                 isActive.current = true
@@ -177,7 +162,6 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     }
   }, [sessionId, onStatus, onToken, onAddMessage])
 
-  // ── Disconnect ───────────────────────────────────────
   const disconnect = useCallback(() => {
     isActive.current = false
     esRef.current?.close()
@@ -189,7 +173,6 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     setVisionMode(null); setVideoStream(null)
   }, [])
 
-  // ── Mic — continuous, auto-restart ──────────────────
   const startMic = useCallback(() => {
     if (!connected || listening) return
     player.current.stop()
@@ -201,8 +184,8 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     isActive.current = true
     setListening(true)
     onStatus('listening')
-    
-const startRec = () => {
+
+    const startRec = () => {
       if (!isActive.current) return
       const rec = new SR()
       rec.continuous = true
@@ -211,38 +194,20 @@ const startRec = () => {
       rec.lang = 'bn-BD'
       recRef.current = rec
 
-      let lastText  = ''
-      let sendTimer = null
-      let silenceTimer = null
+      let lastText = ''
 
       rec.onresult = async (e) => {
-        // TTS চলার সময় ignore
         if (!isActive.current) return
         const result = e.results[e.results.length - 1]
-        const text   = result[0].transcript.trim()
+        const text = result[0].transcript.trim()
         if (!text) return
-
-        // ৩ সেকেন্ড silence timer reset
-        clearTimeout(silenceTimer)
-        silenceTimer = setTimeout(() => {
-          if (!isActive.current) return
-          if (lastText && lastText !== '') {
-            // silence হয়েছে — send করো
-          }
-        }, 3000)
 
         if (result.isFinal && text !== lastText) {
           lastText = text
-          clearTimeout(sendTimer)
-          clearTimeout(silenceTimer)
-
+          isActive.current = false
           onTranscript(text)
           onAddMessage({ role: 'user', content: text, fromLive: true })
           onStatus('thinking')
-
-          // TTS চলার সময় mic বন্ধ
-          isActive.current = false
-
           try {
             await fetch(`${API_URL}/api/live/send`, {
               method: 'POST',
@@ -264,64 +229,6 @@ const startRec = () => {
       }
 
       rec.onend = () => {
-        if (isActive.current) setTimeout(startRec, 300)
-        else { setListening(false); onStatus('ready') }
-      }
-
-      try { rec.start() } catch {}
-    }
-      rec.continuous     = true
-      rec.interimResults = true
-      rec.maxAlternatives = 1
-      rec.lang = 'bn-BD'
-      recRef.current = rec
-
-      let lastText  = ''
-      let sendTimer = null
-      if (speaking) return
-      player.current.stop()
-      
-      rec.onresult = async (e) => {
-      if (!isActive.current) return
-      const result = e.results[e.results.length - 1]
-        const text   = result[0].transcript.trim()
-        if (!text) return
-
-        if (result.isFinal && text !== lastText) {
-          lastText = text
-          clearTimeout(sendTimer)
-
-          onTranscript(text)
-          onAddMessage({ role: 'user', content: text, fromLive: true })
-          onStatus('thinking')
-
-          try {
-            await fetch(`${API_URL}/api/live/send`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: sessionId, text, lang: 'auto' })
-            })
-          } catch {}
-
-          // ৩ সেকেন্ড পর আবার listening status
-          sendTimer = setTimeout(() => {
-            if (isActive.current) onStatus('listening')
-          }, 3000)
-        }
-      }
-
-      rec.onerror = (e) => {
-        if (e.error === 'no-speech' || e.error === 'aborted') {
-          if (isActive.current) setTimeout(startRec, 300)
-        } else {
-          isActive.current = false
-          setListening(false)
-          onStatus('ready')
-        }
-      }
-
-      rec.onend = () => {
-        // Auto-restart যদি mic এখনো active
         if (isActive.current) setTimeout(startRec, 300)
         else { setListening(false); onStatus('ready') }
       }
@@ -332,7 +239,6 @@ const startRec = () => {
     startRec()
   }, [connected, listening, sessionId, onTranscript, onAddMessage, onStatus])
 
-  // ── Stop Mic ─────────────────────────────────────────
   const stopMic = useCallback(() => {
     isActive.current = false
     try { recRef.current?.stop() } catch {}
@@ -341,7 +247,6 @@ const startRec = () => {
     onStatus('ready')
   }, [onStatus])
 
-  // ── Send typed text ──────────────────────────────────
   const sendText = useCallback(async (text) => {
     if (!connected || !text.trim()) return
     player.current.stop(); setSpeaking(false)
@@ -356,7 +261,6 @@ const startRec = () => {
     } catch {}
   }, [connected, sessionId, onTranscript, onAddMessage])
 
-  // ── Camera ───────────────────────────────────────────
   const startCamera = useCallback(async () => {
     visionProc.current?.stop()
     try {
@@ -376,7 +280,6 @@ const startRec = () => {
     } catch (err) { onStatus(`Camera: ${err.message}`) }
   }, [sessionId, onStatus])
 
-  // ── Screen ───────────────────────────────────────────
   const startScreen = useCallback(async () => {
     visionProc.current?.stop()
     try {
@@ -392,7 +295,6 @@ const startRec = () => {
       await proc.startScreen()
       visionProc.current = proc
       setVisionMode('screen')
-      // Screen share বন্ধ হলে auto-stop
       const track = proc.getStream()?.getVideoTracks()[0]
       if (track) {
         track.addEventListener('ended', () => {
@@ -428,9 +330,6 @@ const startRec = () => {
   }
 }
 
-// ══════════════════════════════════════════════════════
-//  LIVE MODAL
-// ══════════════════════════════════════════════════════
 export default function LiveModal({ sessionId, onClose, onAddMessage }) {
   const [status,     setStatus]     = useState('disconnected')
   const [liveTokens, setLiveTokens] = useState('')
@@ -461,13 +360,10 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col select-none"
       style={{ background: '#000' }}
     >
-      {/* Top bar */}
       <div className="flex items-center justify-between px-5 pt-10 pb-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <svg width="18" height="18" viewBox="0 0 24 24">
@@ -491,10 +387,7 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
         </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 relative overflow-hidden">
-
-        {/* Camera preview */}
         {live.visionMode === 'camera' && live.videoStream && (
           <motion.div initial={{ opacity:0, scale:0.8 }} animate={{ opacity:1, scale:1 }}
             className="absolute top-2 right-4 rounded-2xl overflow-hidden"
@@ -502,8 +395,6 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
             <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover"/>
           </motion.div>
         )}
-
-        {/* Screen badge */}
         {live.visionMode === 'screen' && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
             className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full"
@@ -513,7 +404,6 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
           </motion.div>
         )}
 
-        {/* Orb */}
         <div className="relative flex items-center justify-center mb-12">
           {[90, 115, 140].map((size, i) => (
             <motion.div key={i} className="absolute rounded-full"
@@ -542,11 +432,8 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
                 : isConnected
                 ? 'radial-gradient(circle at 35% 35%, #2d3748, #111827)'
                 : 'radial-gradient(circle at 35% 35%, #1a1a2e, #000)',
-              boxShadow: live.speaking
-                ? '0 0 50px rgba(99,102,241,0.5)'
-                : live.listening
-                ? '0 0 50px rgba(225,29,72,0.5)'
-                : 'none',
+              boxShadow: live.speaking ? '0 0 50px rgba(99,102,241,0.5)'
+                : live.listening ? '0 0 50px rgba(225,29,72,0.5)' : 'none',
             }}
             animate={(live.speaking || live.listening) ? { scale:[1,1.07,1] } : {}}
             transition={{ repeat:Infinity, duration:1.2 }}
@@ -558,14 +445,12 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
           </motion.div>
         </div>
 
-        {/* Status */}
         <motion.p key={statusLabel} initial={{ opacity:0, y:4 }} animate={{ opacity:1, y:0 }}
           className="text-[15px] font-medium mb-4 text-center"
           style={{ color:'rgba(255,255,255,0.7)' }}>
           {statusLabel}
         </motion.p>
 
-        {/* Transcript + Response */}
         <div className="w-full max-w-xs text-center space-y-2 min-h-[60px]">
           {transcript && !liveTokens && (
             <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }}
@@ -587,7 +472,6 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
         </div>
       </div>
 
-      {/* Bottom controls */}
       <div className="flex-shrink-0 pb-12 px-8">
         {!isConnected ? (
           <div className="flex flex-col items-center gap-3">
@@ -603,38 +487,27 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
           </div>
         ) : (
           <div className="flex items-center justify-center gap-4">
-
-            {/* Camera */}
-            <motion.button
-              onClick={live.visionMode === 'camera' ? live.stopVision : live.startCamera}
+            <motion.button onClick={live.visionMode === 'camera' ? live.stopVision : live.startCamera}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
               className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{
                 background: live.visionMode === 'camera' ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.1)',
                 border:     live.visionMode === 'camera' ? '1px solid rgba(52,211,153,0.4)' : '1px solid rgba(255,255,255,0.15)',
               }}>
-              {live.visionMode === 'camera'
-                ? <VideoOff size={22} color="#34d399"/>
-                : <Video    size={22} color="rgba(255,255,255,0.7)"/>}
+              {live.visionMode === 'camera' ? <VideoOff size={22} color="#34d399"/> : <Video size={22} color="rgba(255,255,255,0.7)"/>}
             </motion.button>
 
-            {/* Screen */}
-            <motion.button
-              onClick={live.visionMode === 'screen' ? live.stopVision : live.startScreen}
+            <motion.button onClick={live.visionMode === 'screen' ? live.stopVision : live.startScreen}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
               className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{
                 background: live.visionMode === 'screen' ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.1)',
                 border:     live.visionMode === 'screen' ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.15)',
               }}>
-              {live.visionMode === 'screen'
-                ? <MonitorOff size={22} color="#818cf8"/>
-                : <Monitor   size={22} color="rgba(255,255,255,0.7)"/>}
+              {live.visionMode === 'screen' ? <MonitorOff size={22} color="#818cf8"/> : <Monitor size={22} color="rgba(255,255,255,0.7)"/>}
             </motion.button>
 
-            {/* Mic */}
-            <motion.button
-              onClick={live.listening ? live.stopMic : live.startMic}
+            <motion.button onClick={live.listening ? live.stopMic : live.startMic}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
               className="w-16 h-16 rounded-full flex items-center justify-center relative"
               style={{
@@ -642,9 +515,7 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
                 border:     live.listening ? '1px solid rgba(255,255,255,0.2)' : 'none',
                 boxShadow:  !live.listening ? '0 0 24px rgba(220,38,38,0.45)' : 'none',
               }}>
-              {live.listening
-                ? <MicOff size={24} color="rgba(255,255,255,0.9)"/>
-                : <Mic    size={24} color="white"/>}
+              {live.listening ? <MicOff size={24} color="rgba(255,255,255,0.9)"/> : <Mic size={24} color="white"/>}
               {live.listening && (
                 <motion.span className="absolute inset-0 rounded-full pointer-events-none"
                   style={{ border:'2px solid rgba(255,255,255,0.3)' }}
@@ -653,20 +524,14 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
               )}
             </motion.button>
 
-            {/* Audio toggle */}
-            <motion.button
-              onClick={() => { const n = !audioOn; setAudioOn(n); live.toggleAudio(n) }}
+            <motion.button onClick={() => { const n = !audioOn; setAudioOn(n); live.toggleAudio(n) }}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
               className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.15)' }}>
-              {audioOn
-                ? <Volume2 size={22} color="rgba(255,255,255,0.7)"/>
-                : <VolumeX size={22} color="rgba(255,255,255,0.25)"/>}
+              {audioOn ? <Volume2 size={22} color="rgba(255,255,255,0.7)"/> : <VolumeX size={22} color="rgba(255,255,255,0.25)"/>}
             </motion.button>
 
-            {/* End call */}
-            <motion.button
-              onClick={() => { live.disconnect(); onClose() }}
+            <motion.button onClick={() => { live.disconnect(); onClose() }}
               whileHover={{ scale:1.06 }} whileTap={{ scale:0.94 }}
               className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{ background:'#dc2626', boxShadow:'0 0 16px rgba(220,38,38,0.35)' }}>
@@ -679,9 +544,6 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
   )
 }
 
-// ══════════════════════════════════════════════════════
-//  LIVE MODE BUTTON
-// ══════════════════════════════════════════════════════
 export function LiveModeButton({ onClick, active = false }) {
   return (
     <motion.button onClick={onClick}
