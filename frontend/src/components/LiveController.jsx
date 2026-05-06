@@ -149,27 +149,27 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
             setSpeaking(true)
             break
             case 'tts_chunk':
-              isActive.current = false  // TTS চলার সময় mic বন্ধ
-              player.current.play(msg.audio_b64)
-              break
-            case 'tts_text':
-              isActive.current = false
-              player.current.speakFallback(msg.text)
-              break
-            case 'done':
-              setSpeaking(false)
-              // TTS শেষ হলে আবার mic চালু
-              setTimeout(() => {
-                if (recRef.current && listening) {
-                  isActive.current = true
-                }
-              }, 800)            
+            isActive.current = false  // TTS চলার সময় mic বন্ধ
+            player.current.play(msg.audio_b64)
+            break
+          case 'tts_text':
+            isActive.current = false
+            player.current.speakFallback(msg.text)
+            break
+          case 'done':
             setSpeaking(false)
             onStatus('ready')
             if (fullResp.current.trim()) {
               onAddMessage({ role: 'assistant', content: fullResp.current, fromLive: true })
               fullResp.current = ''
             }
+            // TTS শেষ — ১ সেকেন্ড পর mic আবার চালু
+            setTimeout(() => {
+              if (recRef.current !== null) {
+                isActive.current = true
+                onStatus('listening')
+              }
+            }, 1000)
             break
           case 'ping': break
         }
@@ -201,10 +201,75 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     isActive.current = true
     setListening(true)
     onStatus('listening')
-
-    const startRec = () => {
+    
+const startRec = () => {
       if (!isActive.current) return
       const rec = new SR()
+      rec.continuous = true
+      rec.interimResults = true
+      rec.maxAlternatives = 1
+      rec.lang = 'bn-BD'
+      recRef.current = rec
+
+      let lastText  = ''
+      let sendTimer = null
+      let silenceTimer = null
+
+      rec.onresult = async (e) => {
+        // TTS চলার সময় ignore
+        if (!isActive.current) return
+        const result = e.results[e.results.length - 1]
+        const text   = result[0].transcript.trim()
+        if (!text) return
+
+        // ৩ সেকেন্ড silence timer reset
+        clearTimeout(silenceTimer)
+        silenceTimer = setTimeout(() => {
+          if (!isActive.current) return
+          if (lastText && lastText !== '') {
+            // silence হয়েছে — send করো
+          }
+        }, 3000)
+
+        if (result.isFinal && text !== lastText) {
+          lastText = text
+          clearTimeout(sendTimer)
+          clearTimeout(silenceTimer)
+
+          onTranscript(text)
+          onAddMessage({ role: 'user', content: text, fromLive: true })
+          onStatus('thinking')
+
+          // TTS চলার সময় mic বন্ধ
+          isActive.current = false
+
+          try {
+            await fetch(`${API_URL}/api/live/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sessionId, text, lang: 'auto' })
+            })
+          } catch {}
+        }
+      }
+
+      rec.onerror = (e) => {
+        if (e.error === 'no-speech' || e.error === 'aborted') {
+          if (isActive.current) setTimeout(startRec, 300)
+        } else {
+          isActive.current = false
+          setListening(false)
+          onStatus('ready')
+        }
+      }
+
+      rec.onend = () => {
+        if (isActive.current) setTimeout(startRec, 300)
+        else { setListening(false); onStatus('ready') }
+      }
+
+      try { rec.start() } catch {}
+    }
       rec.continuous     = true
       rec.interimResults = true
       rec.maxAlternatives = 1
@@ -327,11 +392,24 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       await proc.startScreen()
       visionProc.current = proc
       setVisionMode('screen')
-      proc.getStream()?.getVideoTracks()[0]?.addEventListener('ended', () => {
-        setVisionMode(null)
-        visionProc.current = null
-      })
-    } catch (err) { onStatus(`Screen: ${err.message}`) }
+      // Screen share বন্ধ হলে auto-stop
+      const track = proc.getStream()?.getVideoTracks()[0]
+      if (track) {
+        track.addEventListener('ended', () => {
+          visionProc.current?.stop()
+          visionProc.current = null
+          setVisionMode(null)
+          setVideoStream(null)
+        })
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        onStatus('Screen share cancelled')
+        setTimeout(() => onStatus('ready'), 2000)
+      } else {
+        onStatus(`Screen: ${err.message}`)
+      }
+    }
   }, [sessionId, onStatus])
 
   const stopVision = useCallback(() => {
