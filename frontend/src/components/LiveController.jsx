@@ -185,8 +185,12 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
     setListening(true)
     onStatus('listening')
 
-    const startRec = () => {
+    let silenceTimer = null
+    let lastText = ''
+
+    const createRec = () => {
       if (!isActive.current) return
+
       const rec = new SR()
       rec.continuous = true
       rec.interimResults = true
@@ -194,33 +198,44 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       rec.lang = 'bn-BD'
       recRef.current = rec
 
-      let lastText = ''
-
       rec.onresult = async (e) => {
         if (!isActive.current) return
         const result = e.results[e.results.length - 1]
         const text = result[0].transcript.trim()
         if (!text) return
 
-        if (result.isFinal && text !== lastText) {
-          lastText = text
-          isActive.current = false
-          onTranscript(text)
-          onAddMessage({ role: 'user', content: text, fromLive: true })
-          onStatus('thinking')
-          try {
-            await fetch(`${API_URL}/api/live/send`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: sessionId, text, lang: 'auto' })
-            })
-          } catch {}
+        // User কথা বলছে — silence timer reset
+        clearTimeout(silenceTimer)
+
+        if (result.isFinal) {
+          // পুরো text জমা করো
+          lastText = lastText ? lastText + ' ' + text : text
+
+          // ৩ সেকেন্ড চুপ থাকলে send করো
+          silenceTimer = setTimeout(async () => {
+            if (!isActive.current || !lastText.trim()) return
+            const finalText = lastText.trim()
+            lastText = ''
+
+            isActive.current = false
+            onTranscript(finalText)
+            onAddMessage({ role: 'user', content: finalText, fromLive: true })
+            onStatus('thinking')
+
+            try {
+              await fetch(`${API_URL}/api/live/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, text: finalText, lang: 'auto' })
+              })
+            } catch {}
+          }, 3000)
         }
       }
 
       rec.onerror = (e) => {
         if (e.error === 'no-speech' || e.error === 'aborted') {
-          if (isActive.current) setTimeout(startRec, 300)
+          if (isActive.current) setTimeout(createRec, 200)
         } else {
           isActive.current = false
           setListening(false)
@@ -229,14 +244,14 @@ function useRubraLive(sessionId, { onTranscript, onToken, onStatus, onAddMessage
       }
 
       rec.onend = () => {
-        if (isActive.current) setTimeout(startRec, 300)
+        if (isActive.current) setTimeout(createRec, 200)
         else { setListening(false); onStatus('ready') }
       }
 
       try { rec.start() } catch {}
     }
 
-    startRec()
+    createRec()
   }, [connected, listening, sessionId, onTranscript, onAddMessage, onStatus])
 
   const stopMic = useCallback(() => {
