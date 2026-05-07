@@ -22,9 +22,9 @@ os.chdir(str(HERE))
 # ═══════════════════════════════════════════════════════
 #  API KEYS
 # ═══════════════════════════════════════════════════════
-ZAI_KEY  = os.getenv("ZAI_API_KEY",    "b4a30453455d4c5fa63d63ce32b71506.k1s8vXrPLKnr3m5l")
-GROQ_KEY = os.getenv("GROQ_API_KEY",   "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")
-OR_KEY   = os.getenv("OPENROUTER_KEY", "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")
+ZAI_KEY  = os.getenv("ZAI_API_KEY",    "Your API Key")
+GROQ_KEY = os.getenv("GROQ_API_KEY",   "Your API Key")
+OR_KEY   = os.getenv("OPENROUTER_KEY", "Your API Key")
 
 ZAI_CHAT = "https://api.z.ai/api/paas/v4/chat/completions"
 ZAI_CODE = "https://api.z.ai/api/coding/paas/v4/chat/completions"
