@@ -659,3 +659,30 @@ export default function LiveModal({ sessionId, onClose, onAddMessage }) {
     </motion.div>
   )
 }
+// ══════════════════════════════════════════════════════
+//  LIVE MODE BUTTON (Export for TopBar)
+// ══════════════════════════════════════════════════════
+export function LiveModeButton({ onClick, active = false }) {
+  return (
+    <motion.button onClick={onClick}
+      whileHover={{ scale:1.04 }} whileTap={{ scale:0.96 }}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-medium"
+      style={{
+        background: active ? 'rgba(225,29,72,0.15)' : 'rgba(255,255,255,0.05)',
+        border:     active ? '1px solid rgba(225,29,72,0.4)' : '1px solid rgba(255,255,255,0.08)',
+        color:      active ? '#fb7185' : 'rgba(255,255,255,0.5)',
+      }}>
+      <svg width="13" height="13" viewBox="0 0 24 24">
+        <rect x="2"  y="16" width="4" height="6"  rx="0.5" fill="currentColor" opacity="0.5"/>
+        <rect x="8"  y="11" width="4" height="11" rx="0.5" fill="currentColor" opacity="0.7"/>
+        <rect x="14" y="6"  width="4" height="16" rx="0.5" fill="currentColor" opacity="0.85"/>
+        <rect x="20" y="2"  width="4" height="20" rx="0.5" fill="currentColor"/>
+      </svg>
+      Live
+      {active && (
+        <motion.span className="w-1.5 h-1.5 rounded-full bg-rose-400"
+          animate={{ opacity:[1,0.3,1] }} transition={{ repeat:Infinity, duration:1 }}/>
+      )}
+    </motion.button>
+  )
+}
